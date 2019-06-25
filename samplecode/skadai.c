@@ -251,7 +251,7 @@ int inference6(const float*A1,const float *b1,const float*A3,const float*b3,cons
     float *y4 = malloc(sizeof(float) * 100);
     float *y5 = malloc(sizeof(float) * 10);
     float *y6 = malloc(sizeof(float) * 10);
-    //順伝播は左端の引数が出力値
+    //順伝播は右端の引数が出力値
     fc(50, 784, x, A1, b1, y1);
     relu(50, y1, y2);
     fc(100, 50, y2, A3, b3, y3);

@@ -251,7 +251,7 @@ int inference6(const float*A1,const float *b1,const float*A3,const float*b3,cons
     float *y4 = malloc(sizeof(float) * 100);
     float *y5 = malloc(sizeof(float) * 10);
     float *y6 = malloc(sizeof(float) * 10);
-    //順伝播は右端の引数が出力値
+    //順伝播は左端の引数が出力値
     fc(50, 784, x, A1, b1, y1);
     relu(50, y1, y2);
     fc(100, 50, y2, A3, b3, y3);
@@ -275,35 +275,28 @@ int inference6(const float*A1,const float *b1,const float*A3,const float*b3,cons
 }
 
 //back prop（6層）
-void backward6(const float * A1, const float * b1, const float * A3, const float * b3, const float * A5, const float * b5, const float * x, unsigned char t, float *y1,float *y2, float *y3, float *y4, float *y5, float *y6, float *dA1, float *db1, float *dA3, float *db3,float *dA5, float *db5){
+void backward6(const float * A1, const float * b1, const float * A3, const float * b3, const float * A5, const float * b5, const float * x, unsigned char t, float *y1,float *y2, float *y3, float *y4, float *y5, float *y6, float *dA1, float *db1, float *dA3, float *db3,float *dA5, float *db5, float *dx6, float *dx5, float *dx4, float *dx3, float *dx2, float *dx1){
 
 
     //順伝播は左端の引数が出力値
     fc(50, 784, x, A1, b1, y1);
+
     relu(50, y1, y2);
     fc(100, 50, y2, A3, b3, y3);
     relu(100, y3, y4);
     fc(10, 100, y4, A5, b5, y5);
     softmax(10, y5, y6);
 
-    float *dx6 = malloc(sizeof(float) * 10);
-    float *dx5 = malloc(sizeof(float) * 10);
-    float *dx4 = malloc(sizeof(float) * 100);
-    float *dx3 = malloc(sizeof(float) * 100);
-    float *dx2 = malloc(sizeof(float) * 50);
-    float *dx1 = malloc(sizeof(float) * 50);
-
-
-
-
     softmaxwithloss_bwd(10, y6, t, dx6);
-    fc_bwd(10 , 100, x, dx6, A5, dA5, db5, dx5);
-    relu_bwd(100, x, dx5, dx4);
-    fc_bwd(100, 50, x, dx4, A3, dA3, db3, dx3);
-    relu_bwd(10, x, dx3, dx2);
+    //OK
+    fc_bwd(10, 100, y4, dx6, A5, dA5, db5, dx5);
+    relu_bwd(100, y3, dx5, dx4);
+    fc_bwd(100, 50, y2, dx4, A3, dA3, db3, dx3);
+    relu_bwd(10, y1, dx3, dx2);
     fc_bwd(50, 784, x, dx2, A1, dA1, db1, dx1);
-    
+
 } 
+
 
 // テスト
 int main(int argc, char const *argv[]) {
@@ -372,12 +365,12 @@ int main(int argc, char const *argv[]) {
     rand_init(100, b3);
     rand_init(100 * 10, A5);
     rand_init(10, b5);
-    printf("batch:%d\n",num_batch);
-    printf("dim:%d\n",num_dim);
-    printf("epoch:%d\n",num_epoch);
+    printf("batch : %d\n",num_batch);
+    printf("dim : %d\n",num_dim);
+    printf("epoch : %d\n",num_epoch);
     printf("Please input your learning rate : ");
     scanf("%f", &learning_late);
-    printf("alpha:%f\n", learning_late);
+    printf("alpha : %.2f\n", learning_late);
     //[0 : N-1]配列の作成
     for (int j = 0; j < train_count;j++){
         index[j] = j;
@@ -386,13 +379,13 @@ int main(int argc, char const *argv[]) {
     //printf("running...1");
     //確率的勾配降下法（エポック回数）
     for (int i = 0; i < num_epoch; i++) {
-        
+        printf("epoch%d is running...\n", i + 1);
+
         //ランダムシャッフル
         shuffle(train_count, index);
-        printf("running shuffle...\n");
         //勾配降下法（N/n回）
         for (int j = 0; j < num_train; j++) {
-            //初期化        
+            //初期化 
             init(784 * 50, 0, dA1ave);
             init(50 * 100, 0, dA3ave);
             init(100 * 10, 0, dA5ave);
@@ -400,10 +393,9 @@ int main(int argc, char const *argv[]) {
             init(100, 0, db3ave);
             init(10, 0, db5ave);
             //back prop
-            printf("running init...\n");
             for (int k = 0; k < num_batch; k++) {
-                backward6(A1, b1, A3, b3, A5, b5, train_x + 784 * index[100 * j + k], train_y[index[100 * j + k]], y1, y2, y3, y4, y5, y6, dA1, db1, dA3, db3, dA5, db5);
-                printf("running backward6...\n");
+                
+                backward6(A1, b1, A3, b3, A5, b5, train_x + 784 * index[100 * j + k], train_y[index[100 * j + k]], y1, y2, y3, y4, y5, y6, dA1, db1, dA3, db3, dA5, db5, dx6, dx5, dx4, dx3, dx2, dx1);
                 //aveの計算
                 add(784 * 50, dA1, dA1ave);
                 add(50 * 100, dA3, dA3ave);
@@ -411,6 +403,14 @@ int main(int argc, char const *argv[]) {
                 add(50, db1, db1ave);
                 add(100, db3, db3ave);
                 add(10, db5, db5ave);
+                
+            }
+            if (j == 0){
+                printf("epoch%d processing : ", i + 1);
+            }
+            if (j % 6 == 0) {
+                printf("#");
+
             }
             scale(784 * 50, 1 / num_batch, dA1ave);
             scale(50 * 100, 1 / num_batch, dA3ave);
@@ -431,7 +431,7 @@ int main(int argc, char const *argv[]) {
             add(50, db1ave, b1);
             add(100, db3ave, b3);
             add(10, db5ave, b5);
-            print(1, 10, db1);
+
         }
         int sum = 0;
         for (int k = 0; k < test_count; k++) {
@@ -441,6 +441,7 @@ int main(int argc, char const *argv[]) {
             }
         }
         printf("epoch%d : %f%%\n", i, sum * 100.0 / test_count);
-    return 0;
+        printf("epoch1 completed...\n");
     }
+    return 0;
 }

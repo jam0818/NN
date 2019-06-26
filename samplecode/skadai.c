@@ -66,15 +66,21 @@ float GetRandom(float min,float max){
 
 //初期化関数
 void rand_init(int n, float * o) {
-    srand((unsigned)time(NULL));
     for(int i = 0; i < n; i++) {
         o[i] = GetRandom(-1, 1);
     }
 }
 
 //fc層（順伝播）
-void fc(int m, int n, const float * x, const float * A, const float * b, float *y) {
+void fc(int m,
+        int n,
+        const float *x,  // (n,)
+        const float *A,  // (m, n)
+        const float *b,  // (m,)
+        float *y         // (m,)
+        ) {
     for(int i = 0; i < m; i++){
+        y[i] = 0;
         for(int j = 0; j < n; j++){
             y[i] = y[i] + A[j + i * n] * x[j];
         }
@@ -163,7 +169,7 @@ void fc_bwd(int m, int n, const float * x, const float * dEdy, const float * A, 
     //dEdAの計算
     for (int i = 0; i < m; i++){
         for (int j = 0; j < n; j++){
-            dEdA[j + i * n] = dEdy[i] * x[j + i * n];
+            dEdA[j + i * n] = dEdy[j] * x[j + i * n];
         }
     }
     //dEdbの計算
@@ -245,12 +251,12 @@ void load(const char * filename, int m, int n, float * A, float * b) {
 
 //推論（6層）
 int inference6(const float*A1,const float *b1,const float*A3,const float*b3,const float*A5,const float*b5, const float *x){
-    float *y1 = malloc(sizeof(float) * 50);
-    float *y2 = malloc(sizeof(float) * 50);
-    float *y3 = malloc(sizeof(float) * 100);
-    float *y4 = malloc(sizeof(float) * 100);
-    float *y5 = malloc(sizeof(float) * 10);
-    float *y6 = malloc(sizeof(float) * 10);
+    float *y1 = malloc(sizeof(float) * 50);   // (50,)
+    float *y2 = malloc(sizeof(float) * 50);   // (50,)
+    float *y3 = malloc(sizeof(float) * 100);  // (100,)
+    float *y4 = malloc(sizeof(float) * 100);  // (100,)
+    float *y5 = malloc(sizeof(float) * 10);   // (50,)
+    float *y6 = malloc(sizeof(float) * 10);   // (50,)
     //順伝播は左端の引数が出力値
     fc(50, 784, x, A1, b1, y1);
     relu(50, y1, y2);
@@ -275,31 +281,69 @@ int inference6(const float*A1,const float *b1,const float*A3,const float*b3,cons
 }
 
 //back prop（6層）
-void backward6(const float * A1, const float * b1, const float * A3, const float * b3, const float * A5, const float * b5, const float * x, unsigned char t, float *y1,float *y2, float *y3, float *y4, float *y5, float *y6, float *dA1, float *db1, float *dA3, float *db3,float *dA5, float *db5, float *dx6, float *dx5, float *dx4, float *dx3, float *dx2, float *dx1){
+void backward6(const float *A1,  // (50, 784)
+               const float *b1,  // (50,)
+               const float *A3,  // (100, 50)
+               const float *b3,  // (50,)
+               const float *A5,  // (10, 50)
+               const float *b5,  // (10,)
+               const float *x,   // (784,) 
+               unsigned char t,   // (1,)
+               float *y6,  //(10,)
+               float *dA1, // (50, 784)
+               float *db1, // (50,)
+               float *dA3, // (100, 50)
+               float *db3, // (50,)
+               float *dA5, // (10, 50)
+               float *db5  // (10,)
+               ){
+    float *y1 = malloc(sizeof(float) * 50);  // (50,)
+    float *y2 = malloc(sizeof(float) * 50);  // (50,)
+    float *y3 = malloc(sizeof(float) * 100);  // (100,)
+    float *y4 = malloc(sizeof(float) * 100);  // (100,)
+    float *y5 = malloc(sizeof(float) * 10);  // (10,)
 
-
-    //順伝播は左端の引数が出力値
+    //順伝播は右端の引数が出力値
     fc(50, 784, x, A1, b1, y1);
-
     relu(50, y1, y2);
     fc(100, 50, y2, A3, b3, y3);
     relu(100, y3, y4);
     fc(10, 100, y4, A5, b5, y5);
+    print(10, 10, y5);
     softmax(10, y5, y6);
+    print(1, 10, y6);
+    float *dx6 = malloc(sizeof(float) * 10);
+    float *dx5 = malloc(sizeof(float) * 10);
+    float *dx4 = malloc(sizeof(float) * 100);
+    float *dx3 = malloc(sizeof(float) * 50);
+    float *dx2 = malloc(sizeof(float) * 50);
+    float *dx1 = malloc(sizeof(float) * 784);
 
     softmaxwithloss_bwd(10, y6, t, dx6);
     //OK
+    print(1, 10, y6);
     fc_bwd(10, 100, y4, dx6, A5, dA5, db5, dx5);
     relu_bwd(100, y3, dx5, dx4);
+    print(10, 10, dx4);
     fc_bwd(100, 50, y2, dx4, A3, dA3, db3, dx3);
-    relu_bwd(10, y1, dx3, dx2);
+    relu_bwd(50, y1, dx3, dx2);
     fc_bwd(50, 784, x, dx2, A1, dA1, db1, dx1);
-
+    free(dx1);
+    free(dx2);
+    free(dx3);
+    free(dx4);
+    free(dx5);
+    free(dx6);
+    free(y1);
+    free(y2);
+    free(y3);
+    free(y4);
+    free(y5);
 } 
 
 
 // テスト
-int main(int argc, char const *argv[]) {
+int main(/*int argc, char const *argv[]*/) {
     float * train_x = NULL;
     unsigned char * train_y = NULL;
     int train_count = -1;
@@ -316,21 +360,17 @@ int main(int argc, char const *argv[]) {
 // 訓練データ train_x + 784*i (i=0,...,train_count-1), train_y[0]～train_y[train_count-1],
 // テストデータ test_x + 784*i (i=0,...,test_count-1), test_y[0]～test_y[test_count-1],
 // を使用することができる．
-    if(argc != 4){
+    /*if(argc != 4){
         printf("error");
         exit(1);
-    }
-    int num_dim = atoi(argv[1]);
-    int num_batch = atoi(argv[2]);
-    int num_epoch = atoi(argv[3]);
-    float learning_late = 0;
+    }*/
+    int num_dim = 784;
+    int num_batch = 100;
+    int num_epoch = 10;
+    float learning_late = 0.01;
 
     //変数メモリの確保
-    float *y1 = malloc(sizeof(float) * 50);
-    float *y2 = malloc(sizeof(float) * 50);
-    float *y3 = malloc(sizeof(float) * 100);
-    float *y4 = malloc(sizeof(float) * 100);
-    float *y5 = malloc(sizeof(float) * 10);
+
     float *y6 = malloc(sizeof(float) * 10);
     float *A1 = malloc(sizeof(float) * 784 * 50);
     float *b1 = malloc(sizeof(float) * 50);
@@ -351,14 +391,10 @@ int main(int argc, char const *argv[]) {
     float *db3ave = malloc(sizeof(float) * 100);
     float *db1ave = malloc(sizeof(float) * 50);
     int *index = malloc(sizeof(int) * train_count);
-    float *dx6 = malloc(sizeof(float) * 10);
-    float *dx5 = malloc(sizeof(float) * 10);
-    float *dx4 = malloc(sizeof(float) * 100);
-    float *dx3 = malloc(sizeof(float) * 100);
-    float *dx2 = malloc(sizeof(float) * 50);
-    float *dx1 = malloc(sizeof(float) * 50);
+
 
     //パラメタの初期化
+    srand((unsigned)time(NULL));
     rand_init(784 * 50, A1);
     rand_init(50, b1);
     rand_init(50 * 100, A3);
@@ -369,14 +405,13 @@ int main(int argc, char const *argv[]) {
     printf("dim : %d\n",num_dim);
     printf("epoch : %d\n",num_epoch);
     printf("Please input your learning rate : ");
-    scanf("%f", &learning_late);
+    //scanf("%f", &learning_late);
     printf("alpha : %.2f\n", learning_late);
     //[0 : N-1]配列の作成
     for (int j = 0; j < train_count;j++){
         index[j] = j;
     }
     int num_train = train_count / num_batch;
-    //printf("running...1");
     //確率的勾配降下法（エポック回数）
     for (int i = 0; i < num_epoch; i++) {
         printf("epoch%d is running...\n", i + 1);
@@ -395,7 +430,7 @@ int main(int argc, char const *argv[]) {
             //back prop
             for (int k = 0; k < num_batch; k++) {
                 
-                backward6(A1, b1, A3, b3, A5, b5, train_x + 784 * index[100 * j + k], train_y[index[100 * j + k]], y1, y2, y3, y4, y5, y6, dA1, db1, dA3, db3, dA5, db5, dx6, dx5, dx4, dx3, dx2, dx1);
+                backward6(A1, b1, A3, b3, A5, b5, train_x + 784 * index[100 * j + k], train_y[index[100 * j + k]], y6, dA1, db1, dA3, db3, dA5, db5);
                 //aveの計算
                 add(784 * 50, dA1, dA1ave);
                 add(50 * 100, dA3, dA3ave);
@@ -410,7 +445,6 @@ int main(int argc, char const *argv[]) {
             }
             if (j % 6 == 0) {
                 printf("#");
-
             }
             scale(784 * 50, 1 / num_batch, dA1ave);
             scale(50 * 100, 1 / num_batch, dA3ave);
@@ -434,6 +468,18 @@ int main(int argc, char const *argv[]) {
 
         }
         int sum = 0;
+        for (int k = 0; k < test_count; k++) {
+
+            if (inference6(A1, b1, A3, b3, A5, b5, test_x + 784 * k) == test_y[k]) {
+            sum++;
+            }
+        }
+        printf("epoch%d : %f%%\n", i, sum * 100.0 / test_count);
+        printf("epoch1 completed...\n");
+    }
+    return 0;
+}
+
         for (int k = 0; k < test_count; k++) {
             float *y6 = malloc(sizeof(float) * 10);
             if (inference6(A1, b1, A3, b3, A5, b5, test_x + 784 * k) == test_y[k]) {

@@ -165,11 +165,19 @@ void relu_bwd(int n, const float * x, const float * dEdy, float * dEdx) {
 }
 
 //fc層（逆伝播）
-void fc_bwd(int m, int n, const float * x, const float * dEdy, const float * A, float * dEdA, float * dEdb, float * dEdx) {
+void fc_bwd(int m,
+            int n,
+            const float *x,    // (n,)
+            const float *dEdy, // (m,)
+            const float *A,    // (m, n)
+            float *dEdA,       // (m, n)
+            float *dEdb,       // (m,)
+            float *dEdx        // (n,)
+            ) {
     //dEdAの計算
     for (int i = 0; i < m; i++){
         for (int j = 0; j < n; j++){
-            dEdA[j + i * n] = dEdy[j] * x[j + i * n];
+            dEdA[j + i * n] = dEdy[i] * x[j];
         }
     }
     //dEdbの計算
@@ -178,6 +186,7 @@ void fc_bwd(int m, int n, const float * x, const float * dEdy, const float * A, 
     }
     //下流へ転送する勾配
     for (int i = 0; i < n; i++){
+        dEdx[i] = 0;
         for (int j = 0; j < m ; j++){
             dEdx[i] += A[j * n + i] * dEdy[j];
         }
@@ -265,7 +274,7 @@ int inference6(const float*A1,const float *b1,const float*A3,const float*b3,cons
     fc(10, 100, y4, A5, b5, y5);
     softmax(10, y5, y6);
     int temp = 1;
-    float M;
+    float M = 0;
     for (int i = 0; i < 10; i++){
         if (M < y6[i]){
             M = y6[i];
@@ -281,21 +290,21 @@ int inference6(const float*A1,const float *b1,const float*A3,const float*b3,cons
 }
 
 //back prop（6層）
-void backward6(const float *A1,  // (50, 784)
-               const float *b1,  // (50,)
-               const float *A3,  // (100, 50)
-               const float *b3,  // (50,)
-               const float *A5,  // (10, 50)
-               const float *b5,  // (10,)
-               const float *x,   // (784,) 
-               unsigned char t,   // (1,)
-               float *y6,  //(10,)
+void backward6(const float *A1, // (50, 784)
+               const float *b1, // (50,)
+               const float *A3, // (100, 50)
+               const float *b3, // (50,)
+               const float *A5, // (10, 50)
+               const float *b5, // (10,)
+               const float *x, // (784,) 
+               unsigned char t, // (1,)
+               float *y6, //(10,)
                float *dA1, // (50, 784)
                float *db1, // (50,)
                float *dA3, // (100, 50)
                float *db3, // (50,)
                float *dA5, // (10, 50)
-               float *db5  // (10,)
+               float *db5 // (10,)
                ){
     float *y1 = malloc(sizeof(float) * 50);  // (50,)
     float *y2 = malloc(sizeof(float) * 50);  // (50,)
@@ -309,41 +318,27 @@ void backward6(const float *A1,  // (50, 784)
     fc(100, 50, y2, A3, b3, y3);
     relu(100, y3, y4);
     fc(10, 100, y4, A5, b5, y5);
-    print(10, 10, y5);
     softmax(10, y5, y6);
-    print(1, 10, y6);
+
     float *dx6 = malloc(sizeof(float) * 10);
-    float *dx5 = malloc(sizeof(float) * 10);
+    float *dx5 = malloc(sizeof(float) * 100);
     float *dx4 = malloc(sizeof(float) * 100);
     float *dx3 = malloc(sizeof(float) * 50);
     float *dx2 = malloc(sizeof(float) * 50);
     float *dx1 = malloc(sizeof(float) * 784);
 
     softmaxwithloss_bwd(10, y6, t, dx6);
-    //OK
-    print(1, 10, y6);
     fc_bwd(10, 100, y4, dx6, A5, dA5, db5, dx5);
     relu_bwd(100, y3, dx5, dx4);
-    print(10, 10, dx4);
     fc_bwd(100, 50, y2, dx4, A3, dA3, db3, dx3);
     relu_bwd(50, y1, dx3, dx2);
     fc_bwd(50, 784, x, dx2, A1, dA1, db1, dx1);
-    free(dx1);
-    free(dx2);
-    free(dx3);
-    free(dx4);
-    free(dx5);
-    free(dx6);
-    free(y1);
-    free(y2);
-    free(y3);
-    free(y4);
-    free(y5);
+
 } 
 
 
 // テスト
-int main(/*int argc, char const *argv[]*/) {
+int main(int argc, char const *argv[]) {
     float * train_x = NULL;
     unsigned char * train_y = NULL;
     int train_count = -1;
@@ -360,13 +355,13 @@ int main(/*int argc, char const *argv[]*/) {
 // 訓練データ train_x + 784*i (i=0,...,train_count-1), train_y[0]～train_y[train_count-1],
 // テストデータ test_x + 784*i (i=0,...,test_count-1), test_y[0]～test_y[test_count-1],
 // を使用することができる．
-    /*if(argc != 4){
+    if(argc != 4){
         printf("error");
         exit(1);
-    }*/
-    int num_dim = 784;
-    int num_batch = 100;
-    int num_epoch = 10;
+    }
+    int num_dim = atoi(argv[1]);
+    int num_batch = atoi(argv[2]);
+    int num_epoch = atoi(argv[3]);
     float learning_late = 0.01;
 
     //変数メモリの確保
@@ -405,7 +400,7 @@ int main(/*int argc, char const *argv[]*/) {
     printf("dim : %d\n",num_dim);
     printf("epoch : %d\n",num_epoch);
     printf("Please input your learning rate : ");
-    //scanf("%f", &learning_late);
+    scanf("%f", &learning_late);
     printf("alpha : %.2f\n", learning_late);
     //[0 : N-1]配列の作成
     for (int j = 0; j < train_count;j++){
@@ -443,7 +438,7 @@ int main(/*int argc, char const *argv[]*/) {
             if (j == 0){
                 printf("epoch%d processing : ", i + 1);
             }
-            if (j % 6 == 0) {
+            if (j % 60 == 0) {
                 printf("#");
             }
             scale(784 * 50, 1 / num_batch, dA1ave);
@@ -467,27 +462,18 @@ int main(/*int argc, char const *argv[]*/) {
             add(10, db5ave, b5);
 
         }
-        int sum = 0;
-        for (int k = 0; k < test_count; k++) {
-
-            if (inference6(A1, b1, A3, b3, A5, b5, test_x + 784 * k) == test_y[k]) {
-            sum++;
-            }
-        }
-        printf("epoch%d : %f%%\n", i, sum * 100.0 / test_count);
-        printf("epoch1 completed...\n");
-    }
-    return 0;
-}
-
+        int sum_train = 0;
+        float loss_train = 0;
         for (int k = 0; k < test_count; k++) {
             float *y6 = malloc(sizeof(float) * 10);
             if (inference6(A1, b1, A3, b3, A5, b5, test_x + 784 * k) == test_y[k]) {
-            sum++;
+            sum_train++;
             }
+            loss_train += cross_entropy_error(y6, train_y[k]);
         }
-        printf("epoch%d : %f%%\n", i, sum * 100.0 / test_count);
-        printf("epoch1 completed...\n");
+        printf("\nepoch%d : %f%%\n", i, sum_train * 100.0 / test_count);
+        printf("epoch%d completed...\n", i + 1);
+        printf("loss : %f\n", loss_train);
     }
     return 0;
 }

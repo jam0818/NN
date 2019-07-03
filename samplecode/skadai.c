@@ -61,7 +61,7 @@ void scale(int n, float x, float * o) {
 
 //一定の範囲での乱数生成関数
 float GetRandom(float min,float max){
-	return min + (float)(rand()*(max-min)/(1.0+RAND_MAX));
+	return min + (float)(rand()*(max-min)/(RAND_MAX));
 }
 
 //初期化関数
@@ -229,7 +229,7 @@ void shuffle(int n, int *x){
 
 //損失関数
 float cross_entropy_error(const float * y, int t) {
-    return -log(y[t] + 1e-7);
+    return - log(y[t] + 1e-7);
 }
 
 //学習した係数の保存
@@ -241,6 +241,18 @@ void save(const char *filename, int m, int n, const float *A, const float*b){
     } else {
         fwrite(A, sizeof(float), m * n, fp);
         fwrite(b, sizeof(float), n, fp);
+        fclose(fp);
+    }
+}
+
+void save_vector(const char *filename, int n, const float *V){
+    
+    FILE *fp;
+    if((fp = fopen(filename,"wb"))==NULL){
+        printf("\aファイルをオープンできません。\n");
+    } else {
+        fwrite(V, sizeof(float), n, fp);
+
         fclose(fp);
     }
 }
@@ -260,12 +272,12 @@ void load(const char * filename, int m, int n, float * A, float * b) {
 
 //推論（6層）
 int inference6(const float*A1,const float *b1,const float*A3,const float*b3,const float*A5,const float*b5, const float *x){
-    float *y1 = malloc(sizeof(float) * 50);   // (50,)
-    float *y2 = malloc(sizeof(float) * 50);   // (50,)
-    float *y3 = malloc(sizeof(float) * 100);  // (100,)
-    float *y4 = malloc(sizeof(float) * 100);  // (100,)
-    float *y5 = malloc(sizeof(float) * 10);   // (50,)
-    float *y6 = malloc(sizeof(float) * 10);   // (50,)
+    float *y1 = malloc(sizeof(float) * 50); // (50,)
+    float *y2 = malloc(sizeof(float) * 50); // (50,)
+    float *y3 = malloc(sizeof(float) * 100); // (100,)
+    float *y4 = malloc(sizeof(float) * 100); // (100,)
+    float *y5 = malloc(sizeof(float) * 10); // (50,)
+    float *y6 = malloc(sizeof(float) * 10); // (50,)
     //順伝播は左端の引数が出力値
     fc(50, 784, x, A1, b1, y1);
     relu(50, y1, y2);
@@ -284,7 +296,12 @@ int inference6(const float*A1,const float *b1,const float*A3,const float*b3,cons
         if (M == y6[i])
         temp = i;
     }     
-
+    free(y1);
+    free(y2);
+    free(y3);
+    free(y4);
+    free(y5);
+    free(y6);
     return temp;
 
 }
@@ -306,11 +323,11 @@ void backward6(const float *A1, // (50, 784)
                float *dA5, // (10, 50)
                float *db5 // (10,)
                ){
-    float *y1 = malloc(sizeof(float) * 50);  // (50,)
-    float *y2 = malloc(sizeof(float) * 50);  // (50,)
-    float *y3 = malloc(sizeof(float) * 100);  // (100,)
-    float *y4 = malloc(sizeof(float) * 100);  // (100,)
-    float *y5 = malloc(sizeof(float) * 10);  // (10,)
+    float *y1 = malloc(sizeof(float) * 50); // (50,)
+    float *y2 = malloc(sizeof(float) * 50); // (50,)
+    float *y3 = malloc(sizeof(float) * 100); // (100,)
+    float *y4 = malloc(sizeof(float) * 100); // (100,)
+    float *y5 = malloc(sizeof(float) * 10); // (10,)
 
     //順伝播は右端の引数が出力値
     fc(50, 784, x, A1, b1, y1);
@@ -333,7 +350,17 @@ void backward6(const float *A1, // (50, 784)
     fc_bwd(100, 50, y2, dx4, A3, dA3, db3, dx3);
     relu_bwd(50, y1, dx3, dx2);
     fc_bwd(50, 784, x, dx2, A1, dA1, db1, dx1);
-
+    free(y1);
+    free(y2);
+    free(y3);
+    free(y4);
+    free(y5);
+    free(dx1);
+    free(dx2);
+    free(dx3);
+    free(dx4);
+    free(dx5);
+    free(dx6);
 } 
 
 
@@ -350,7 +377,7 @@ int main(int argc, char const *argv[]) {
     load_mnist(&train_x, &train_y, &train_count,
     &test_x, &test_y, &test_count,
     &width, &height);
-
+    
 // これ以降，３層 NN の係数 A_784x10 および b_784x10 と，
 // 訓練データ train_x + 784*i (i=0,...,train_count-1), train_y[0]～train_y[train_count-1],
 // テストデータ test_x + 784*i (i=0,...,test_count-1), test_y[0]～test_y[test_count-1],
@@ -359,13 +386,15 @@ int main(int argc, char const *argv[]) {
         printf("error");
         exit(1);
     }
+
+    //ハイパーパラメータの設定
     int num_dim = atoi(argv[1]);
-    int num_batch = atoi(argv[2]);
+    int batch_size = atoi(argv[2]);
     int num_epoch = atoi(argv[3]);
-    float learning_late = 0.01;
-
+    float learning_late = 0;
+    float batch_f = batch_size;
+    
     //変数メモリの確保
-
     float *y6 = malloc(sizeof(float) * 10);
     float *A1 = malloc(sizeof(float) * 784 * 50);
     float *b1 = malloc(sizeof(float) * 50);
@@ -386,7 +415,8 @@ int main(int argc, char const *argv[]) {
     float *db3ave = malloc(sizeof(float) * 100);
     float *db1ave = malloc(sizeof(float) * 50);
     int *index = malloc(sizeof(int) * train_count);
-
+    float * acc = malloc(sizeof(float) * num_epoch);
+    float * loss = malloc(sizeof(float) * num_epoch);
 
     //パラメタの初期化
     srand((unsigned)time(NULL));
@@ -396,20 +426,27 @@ int main(int argc, char const *argv[]) {
     rand_init(100, b3);
     rand_init(100 * 10, A5);
     rand_init(10, b5);
-    printf("batch : %d\n",num_batch);
+
+    //ハイパーパラメータの確認と設定
+    printf("batch : %d\n",batch_size);
     printf("dim : %d\n",num_dim);
     printf("epoch : %d\n",num_epoch);
     printf("Please input your learning rate : ");
     scanf("%f", &learning_late);
-    printf("alpha : %.2f\n", learning_late);
+    printf("learning rate : %.2f\n", learning_late);
+
     //[0 : N-1]配列の作成
-    for (int j = 0; j < train_count;j++){
-        index[j] = j;
+    for (int i = 0; i < train_count; i++){
+        index[i] = i;
     }
-    int num_train = train_count / num_batch;
+
+
+    int num_train = train_count / batch_size;
+    float train_f = num_train;
+
     //確率的勾配降下法（エポック回数）
     for (int i = 0; i < num_epoch; i++) {
-        printf("epoch%d is running...\n", i + 1);
+        printf("epoch %d / %d is running...\n\n", i + 1, num_epoch);
 
         //ランダムシャッフル
         shuffle(train_count, index);
@@ -422,10 +459,13 @@ int main(int argc, char const *argv[]) {
             init(50, 0, db1ave);
             init(100, 0, db3ave);
             init(10, 0, db5ave);
-            //back prop
-            for (int k = 0; k < num_batch; k++) {
+
+            //学習
+            for (int k = 0; k < batch_size; k++) {
                 
+                //back prop
                 backward6(A1, b1, A3, b3, A5, b5, train_x + 784 * index[100 * j + k], train_y[index[100 * j + k]], y6, dA1, db1, dA3, db3, dA5, db5);
+                
                 //aveの計算
                 add(784 * 50, dA1, dA1ave);
                 add(50 * 100, dA3, dA3ave);
@@ -433,47 +473,65 @@ int main(int argc, char const *argv[]) {
                 add(50, db1, db1ave);
                 add(100, db3, db3ave);
                 add(10, db5, db5ave);
+                scale(784 * 50, 1.0 / batch_f, dA1ave);
+                scale(50 * 100, 1.0 / batch_f, dA3ave);
+                scale(100 * 10, 1.0 / batch_f, dA5ave);
+                scale(50, 1.0 / batch_f, db1ave);
+                scale(100, 1.0 / batch_f, db3ave);
+                scale(10, 1.0 / batch_f, db5ave);
+                scale(784 * 50, -1.0 * learning_late, dA1ave);
+                scale(50 * 100, -1.0 * learning_late, dA3ave);
+                scale(100 * 10, -1.0 * learning_late, dA5ave);
+                scale(50, -1.0 * learning_late, db1ave);
+                scale(100, -1.0 * learning_late, db3ave);
+                scale(10, -1.0 * learning_late, db5ave);
+                
+                //パラメタの更新
+                add(784 * 50, dA1ave, A1);
+                add(50 * 100, dA3ave, A3);
+                add(100 * 10, dA5ave, A5);
+                add(50, db1ave, b1);
+                add(100, db3ave, b3);
+                add(10, db5ave, b5);
+
                 
             }
+            
+            //プログレスバー
             if (j == 0){
-                printf("epoch%d processing : ", i + 1);
+                printf("0%%      100%%\n");
+                printf("+--------+\n", i + 1);
             }
-            if (j % 60 == 0) {
+            if (j % (num_train / 10) == 0) {
                 printf("#");
             }
-            scale(784 * 50, 1 / num_batch, dA1ave);
-            scale(50 * 100, 1 / num_batch, dA3ave);
-            scale(100 * 10, 1 / num_batch, dA5ave);
-            scale(50, 1 / num_batch, db1ave);
-            scale(100, 1 / num_batch, db3ave);
-            scale(10, 1 / num_batch, db5ave);
-            //パラメタの更新
-            scale(784 * 50, -1 * learning_late, dA1ave);
-            scale(50 * 100, -1 * learning_late, dA3ave);
-            scale(100 * 10, -1 * learning_late, dA5ave);
-            scale(50, -1 * learning_late, db1ave);
-            scale(100, -1 * learning_late, db3ave);
-            scale(10, -1 * learning_late, db5ave);
-            add(784 * 50, dA1ave, A1);
-            add(50 * 100, dA3ave, A3);
-            add(100 * 10, dA5ave, A5);
-            add(50, db1ave, b1);
-            add(100, db3ave, b3);
-            add(10, db5ave, b5);
-
         }
+
+        //正解率の確認
         int sum_train = 0;
         float loss_train = 0;
+        float acc_train = 0;
         for (int k = 0; k < test_count; k++) {
-            float *y6 = malloc(sizeof(float) * 10);
             if (inference6(A1, b1, A3, b3, A5, b5, test_x + 784 * k) == test_y[k]) {
             sum_train++;
             }
-            loss_train += cross_entropy_error(y6, train_y[k]);
         }
-        printf("\nepoch%d : %f%%\n", i, sum_train * 100.0 / test_count);
-        printf("epoch%d completed...\n", i + 1);
-        printf("loss : %f\n", loss_train);
+        acc_train = sum_train * 100.0 / test_count;
+        printf("\naccuracy : %f%%\n\n", acc_train);
+        printf("completed...\n\n", i + 1);
+        for (int l = 0; l < 10; l++) {
+            loss_train = cross_entropy_error(y6, l);
+        }
+
+        //各エポックごとの損失と正答率の格納
+        loss[i] = loss_train;
+        acc[i] = acc_train;
     }
+    
+    //学習したパラメタの保存
+    save("param1.dat", 50, 784, A1, b1);
+    save("param3.dat", 100, 50, A3, b3);
+    save("param5.dat", 10, 100, A5, b5);
+    save_vector("acc_train.dat", num_epoch, acc);
     return 0;
 }

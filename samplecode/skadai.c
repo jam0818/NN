@@ -394,33 +394,52 @@ void Adam(int m,
     float *v_A_hat = malloc(sizeof(float) * m * n);
     float *v_b_hat = malloc(sizeof(float) * n);
     float *delta_grad_A = malloc(sizeof(float) * m * n);
-    float *delta_grad_b = malloc(sizeof(float) * n);    
+    float *delta_grad_b = malloc(sizeof(float) * n);
     
-    #pragma opm parallel
+
+    init(m * n, 0, m_A);
+    init(m * n, 0, v_A);    
+    init(m * n, 0, m_A_hat);
+    init(m * n, 0, v_A_hat);
+    init(m * n, 0, delta_grad_A); 
+    init(n, 0, m_b);
+    init(n, 0, m_b_hat);
+    init(n, 0, v_b);
+    init(n, 0, v_b_hat);
+    init(n, 0, delta_grad_b);        
+    for (int i = 0; i < n; i++)
     {
-        #pragma opm for
-        for (int i = 0; i < n; i++) {
-            m_b[i] = rho1 * m_b[i] + (1 - rho1) * db[i];
-            v_b[i] = rho2 * v_b[i] + (1 - rho2) * powf(db[i], 2.0);
-            m_b_hat[i] = m_b[i] / (1 - rho1);
-            v_b_hat[i] = m_b[i] / (1 - rho2);
-            delta_grad_b[i] = -(learning_rate * m_b_hat[i]) / sqrtf(v_b_hat[i] + eps);
-            add(n, delta_grad_b, db);
+        m_b[i] = rho1 * m_b[i] + (1 - rho1) * db[i];
+        v_b[i] = rho2 * v_b[i] + (1 - rho2) * powf(db[i], 2.0);
+        m_b_hat[i] = m_b[i] / (1 - rho1);
+        v_b_hat[i] = m_b[i] / (1 - rho2);
+        delta_grad_b[i] = -(learning_rate * m_b_hat[i]) / sqrtf(v_b_hat[i] + eps);
+        add(n, delta_grad_b, db);
         }
-        #pragma opm for
+        
         for (int i = 0; i < m; i++) {
-            #pragma opm for
             for (int j = 0; j < n; j++) {
-                m_A[i * m + j] = rho1 * m_A[i * m + j] + (1 - rho1) * dA[i * m + j];
-                v_A[i * m + j] = rho2 * v_A[i * m + j] + (1 - rho2) * powf(dA[i * m + j], 2.0);
-                m_A_hat[i * m + j] = m_A[i * m + j] / (1 - rho1);
-                v_A_hat[i * m + j] = m_A[i * m + j] / (1 - rho2);
-                delta_grad_A[i * m + j] = -(learning_rate * m_A_hat[i * m + j]) / sqrtf(v_A_hat[i * m + j] + eps);
+                m_A[i * n + j] = rho1 * m_A[i * n + j] + (1 - rho1) * dA[i * n + j];
+                v_A[i * n + j] = rho2 * v_A[i * n + j] + (1 - rho2) * powf(dA[i * n + j], 2.0);
+                m_A_hat[i * n + j] = m_A[i * n + j] / (1 - rho1);
+                v_A_hat[i * n + j] = m_A[i * n + j] / (1 - rho2);
+                delta_grad_A[i * n + j] = -(learning_rate * m_A_hat[i * n + j]) / sqrtf(v_A_hat[i * n + j] + eps);
                 add(m * n, delta_grad_A, dA);
             }
         }
-    }
+    
+    free(m_A);
+    free(m_b);
+    free(m_A_hat);
+    free(m_b_hat);
+    free(v_A);
+    free(v_b);
+    free(v_A_hat);
+    free(v_b_hat);
+    free(delta_grad_A);
+    free(delta_grad_b);
 }
+
 
 // テスト
 int main(int argc, char const *argv[]) {

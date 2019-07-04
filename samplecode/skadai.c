@@ -1,3 +1,4 @@
+#define _USE_MATH_DEFINES
 #include <stdio.h>
 #include <stdlib.h>
 #include <omp.h>
@@ -73,16 +74,22 @@ void rand_init(int n, float * o) {
     }
 }
 
+//0<x<1の乱数
+double Uniform( void ){
+    return ((double)rand()+1.0)/((double)RAND_MAX+2.0);
+}
+
 //Box-muller法 正規分布乱数 mu:平均値 sigma:標準偏差
-double box_muller( double mu, double sigma ){
-    double z=sqrt( -2.0*log(GetRandom(0, 1)) ) * sin( 2.0 * 3.141592653589793238462643383279 * GetRandom(0, 1) );
+double rand_normal(double mu, double sigma){
+    double z = sqrt( -2.0 * log(Uniform())) * sin( 2.0 * M_PI * Uniform());
     return mu + sigma*z;
 }
 
-//heの正規分布で初期化
+//Heの正規分布による初期化
 void he_init(int n, float*o){
+    srand(time(NULL));
     for (int i = 0; i < n; i++){
-        o[i] = box_muller(0, sqrt(2.0/n));
+        o[i] = rand_normal(0, sqrt(2.0/n));
     }
 }
 
@@ -102,6 +109,15 @@ void fc(int m,
             y[i] = y[i] + A[j + i * n] * x[j];
         }
         y[i] = y[i] + b[i];
+    }
+}
+
+//正方行列の90度回転
+void rot (int n, const float *x, float *x_rot) {
+    for(int i = 0; i < n; i++) {
+        for(int j = 0; j < n; j++){
+            x_rot[j * n + n - i] = x[i * n + j];
+        }
     }
 }
 
@@ -408,7 +424,8 @@ void Adam(int m,
           float *v_A,
           float *v_b,
           //ハイパーパラメータ
-          float learning_rate, float rho1, float rho2, float eps
+          float learning_rate, float rho1, float rho2, float eps,
+          float t
           ) {
 
     float *m_A_hat = malloc(sizeof(float) * m * n);
@@ -431,22 +448,20 @@ void Adam(int m,
         #pragma omp for
         for (int i = 0; i < n; i++) {
             m_b[i] = rho1 * m_b[i] + (1 - rho1) * db[i];
-            v_b[i] = rho2 * v_b[i] + (1 - rho2) * powf(db[i], 2.0);
-            m_b_hat[i] = m_b[i] / (1 - rho1);
-            v_b_hat[i] = m_b[i] / (1 - rho2);
-            delta_b[i] = -(learning_rate * m_b_hat[i]) / sqrtf(v_b_hat[i] + eps);
-            b[i] += delta_b[i];
+            v_b[i] = rho2 * v_b[i] + (1 - rho2) * db[i] * db[i];
+            m_b_hat[i] = m_b[i] / (1 - powf(rho1 , t));
+            v_b_hat[i] = v_b[i] / (1 - powf(rho2 , t));
+            b[i] -= (learning_rate * m_b_hat[i]) / sqrtf(v_b_hat[i] + eps);
         }
         #pragma omp for
         for (int i = 0; i < m; i++) {
             #pragma omp for
             for (int j = 0; j < n; j++) {
                 m_A[i * n + j] = rho1 * m_A[i * n + j] + (1 - rho1) * dA[i * n + j];
-                v_A[i * n + j] = rho2 * v_A[i * n + j] + (1 - rho2) * powf(dA[i * n + j], 2.0);
-                m_A_hat[i * n + j] = m_A[i * n + j] / (1 - rho1);
-                v_A_hat[i * n + j] = m_A[i * n + j] / (1 - rho2);
-                delta_A[i * n + j] = -(learning_rate * m_A_hat[i * n + j]) / sqrtf(v_A_hat[i * n + j] + eps);
-                A[i * n + j] += delta_A[i * n + j];
+                v_A[i * n + j] = rho2 * v_A[i * n + j] + (1 - rho2) * dA[i * n + j] * dA[i * n + j];
+                m_A_hat[i * n + j] = m_A[i * n + j] / (1 - powf(rho1 , t));
+                v_A_hat[i * n + j] = v_A[i * n + j] / (1 - powf(rho2 , t));
+                A[i * n + j] -= (learning_rate * m_A_hat[i * n + j]) / (sqrtf(v_A_hat[i * n + j] + eps));
             }
         }
     }
@@ -455,6 +470,51 @@ void Adam(int m,
     free(m_b_hat);
     free(v_A_hat);
     free(v_b_hat);
+    free(delta_A);
+    free(delta_b);
+}
+
+//AdaDelta
+void AdaDelta (int m, 
+               int n, 
+               float *dA, //(m, n)
+               float *db, //(n,)
+               float *A, //(m, n)
+               float *b, //(n,)
+               float *m_A,
+               float *m_b,
+               float *v_A,
+               float *v_b,
+               //ハイパーパラメータ
+               float rho1, float eps
+          ) {
+
+    float *delta_A = malloc(sizeof(float) * m * n);
+    float *delta_b = malloc(sizeof(float) * n);    
+
+    init(m * n, 0, delta_A); 
+    init(n, 0, delta_b);  
+
+    #pragma omp parallel
+    {
+        #pragma omp for
+        for (int i = 0; i < n; i++) {
+            v_b[i] = rho1 * v_b[i] + (1 - rho1) * db[i] * db[i];
+            delta_b[i] = -(sqrtf(m_b[i] + eps) * db[i]) / sqrtf(v_b[i] + eps);
+            m_b[i] = rho1 * m_b[i] + (1 - rho1) * delta_b[i] * delta_b[i];
+            b[i] += delta_b[i];
+        }
+        #pragma omp for
+        for (int i = 0; i < m; i++) {
+            #pragma omp for
+            for (int j = 0; j < n; j++) {
+            v_A[i * n + j] = rho1 * v_A[i * n + j] + (1 - rho1) * dA[i * n + j] * dA[i * n + j];
+            delta_A[i * n + j] = - (sqrtf(m_A[i * n + j] + eps) * dA[i * n + j]) / sqrtf(v_A[i * n + j] + eps);
+            m_A[i * n + j] = rho1 * m_A[i * n + j] + (1 - rho1) * delta_A[i * n + j] * delta_A[i * n + j];
+            A[i * n + j] += delta_A[i * n + j];
+            }
+        }
+    }
     free(delta_A);
     free(delta_b);
 }
@@ -538,33 +598,41 @@ int main(int argc, char const *argv[]) {
     rand_init(100, b3);
     rand_init(100 * 10, A5);
     rand_init(10, b5);
-
     int judge = 0;
 
     //ハイパーパラメータの確認と設定、optimizerの選択
     printf("batch : %d\n",batch_size);
     printf("dim : %d\n",num_dim);
     printf("epoch : %d\n",num_epoch);
-    while (judge != 1 && judge != 2) {
-        printf("Please choose your optimizer\n1 : SGD\n2 : Adam\n");
+    while (judge < 1 || judge > 3) {
+        printf("Please choose your optimizer\n1 : SGD\n2 : Adam(WIP)\n3 : AdaDelta\n");
         printf("my opitimizer is ");
         scanf("%d", &judge);
-        if (judge != 1 && judge != 2) {
-            printf("Invalid input!! try again!!");
+        if (judge < 1 || judge > 3) {
+            printf("Invalid input!! try again!!\n");
         }
     }
-    printf("\nPlease input your learning rate : ");
-    scanf("%f", &learning_rate);
     printf("learning rate : %.4f\n", learning_rate);
     if (judge == 1) {
         printf("your opitimizer is SGD\n");
+        printf("Please input your learning rate : ");
+        scanf("%f", &learning_rate);
     } else if (judge == 2) {
         printf("your opitimizer is Adam\n");
         printf("Please input additional hyper parameter\n");
+        printf("learning rate : ");
+        scanf("%f", &learning_rate);
         printf("rho1 : ");
         scanf("%f", &rho1);
         printf("rho2 : ");
         scanf("%f", &rho2);
+        printf("eps : ");
+        scanf("%f", &eps);
+    } else if (judge == 3) {
+        printf("your opitimizer is AdaDelta\n");
+        printf("Please input additional hyper parameter\n");
+        printf("rho1 : ");
+        scanf("%f", &rho1);
         printf("eps : ");
         scanf("%f", &eps);
     }
@@ -611,24 +679,34 @@ int main(int argc, char const *argv[]) {
                 init(50, 0, db1ave);
                 init(100, 0, db3ave);
                 init(10, 0, db5ave);
+                init(784 * 50, 0, dA1);
+                init(50 * 100, 0, dA3);
+                init(100 * 10, 0, dA5);
+                init(50, 0, db1);
+                init(100, 0, db3);
+                init(10, 0, db5);                
                 //学習
-                
                 #pragma omp for
                 for (k = 0; k < batch_size; k++) { 
                     //back prop
                     printf("\r[%3d/100%%]", ((k + batch_size * j + 1) * 100) / train_count);
                     backward6(A1, b1, A3, b3, A5, b5, train_x + 784 * index[100 * j + k], train_y[index[100 * j + k]], y6, dA1, db1, dA3, db3, dA5, db5);
-
+                    
+                    //最適化
                     if(judge == 1){
                         //SGDの実行
                         SGD(784, 50, dA1, dA1ave, db1, db1ave, batch_f, learning_rate, A1, b1);
                         SGD(50, 100, dA3, dA3ave, db3, db3ave, batch_f, learning_rate, A3, b3);
                         SGD(100, 10, dA5, dA5ave, db5, db5ave, batch_f, learning_rate, A5, b5);
                     } else if (judge == 2) {
-                        Adam(784, 50, dA1, db1, A1, b1, m_A1, m_b1, v_A1, v_b1, learning_rate, rho1, rho2, eps);
-                        Adam(50, 100, dA3, db3, A3, b3, m_A3, m_b3, v_A3, v_b3, learning_rate, rho1, rho2, eps);
-                        Adam(100, 10, dA5, db5, A5, b5, m_A5, m_b5, v_A5, v_b5, learning_rate, rho1, rho2, eps);
-
+                        //Adamの実行
+                        Adam(784, 50, dA1, db1, A1, b1, m_A1, m_b1, v_A1, v_b1, learning_rate, rho1, rho2, eps, k + 1);
+                        Adam(50, 100, dA3, db3, A3, b3, m_A3, m_b3, v_A3, v_b3, learning_rate, rho1, rho2, eps, k + 1);
+                        Adam(100, 10, dA5, db5, A5, b5, m_A5, m_b5, v_A5, v_b5, learning_rate, rho1, rho2, eps, k + 1);
+                    } else if (judge == 3) {
+                        AdaDelta(784, 50, dA1, db1, A1, b1, m_A1, m_b1, v_A1, v_b1, rho1, eps);
+                        AdaDelta(50, 100, dA3, db3, A3, b3, m_A3, m_b3, v_A3, v_b3, rho1, eps);
+                        AdaDelta(100, 10, dA5, db5, A5, b5, m_A5, m_b5, v_A5, v_b5, rho1, eps);
                     }
                   
                 }
@@ -652,6 +730,7 @@ int main(int argc, char const *argv[]) {
             }
             acc_train = sum_train * 100.0 / train_count;
             
+            #pragma omp for
             for (k = 0; k < test_count; k++) {
                 if (inference6(A1, b1, A3, b3, A5, b5, test_x + 784 * k, y6) == test_y[k]) {
                     sum_test++;
@@ -688,6 +767,15 @@ int main(int argc, char const *argv[]) {
         save_vector("loss_trainAdam.dat", num_epoch, loss_save_train);
         save_vector("acc_testAdam.dat", num_epoch, acc_save_test);
         save_vector("loss_testAdam.dat", num_epoch, loss_save_test);
+    } else if(judge == 3) {
+        save("param1AdaDelta.dat", 50, 784, A1, b1);
+        save("param3AdaDelta.dat", 100, 50, A3, b3);
+        save("param5AdaDelta.dat", 10, 100, A5, b5);
+        save_vector("acc_trainAdaDelta.dat", num_epoch, acc_save_train);
+        save_vector("loss_trainAdaDelta.dat", num_epoch, loss_save_train);
+        save_vector("acc_testAdaDelta.dat", num_epoch, acc_save_test);
+        save_vector("loss_testAdaDelta.dat", num_epoch, loss_save_test);
     }
     return 0;
 }
+

@@ -382,64 +382,63 @@ void Adam(int m,
           int n, 
           float *dA, //(m, n)
           float *db, //(n,)
+          float *A, //(m, n)
+          float *b, //(n,)
+          float *m_A,
+          float *m_b,
+          float *v_A,
+          float *v_b,
           //ハイパーパラメータ
           float learning_rate, float rho1, float rho2, float eps
           ) {
-    float *m_A = malloc(sizeof(float) * m * n);
-    float *m_b = malloc(sizeof(float) * n);
-    float *v_A = malloc(sizeof(float) * m * n);
-    float *v_b = malloc(sizeof(float) * n);
+
     float *m_A_hat = malloc(sizeof(float) * m * n);
     float *m_b_hat = malloc(sizeof(float) * n);
     float *v_A_hat = malloc(sizeof(float) * m * n);
     float *v_b_hat = malloc(sizeof(float) * n);
-    float *delta_grad_A = malloc(sizeof(float) * m * n);
-    float *delta_grad_b = malloc(sizeof(float) * n);
-    
+    float *delta_A = malloc(sizeof(float) * m * n);
+    float *delta_b = malloc(sizeof(float) * n);    
 
-    init(m * n, 0, m_A);
-    init(m * n, 0, v_A);    
+
     init(m * n, 0, m_A_hat);
     init(m * n, 0, v_A_hat);
-    init(m * n, 0, delta_grad_A); 
-    init(n, 0, m_b);
+    init(m * n, 0, delta_A); 
     init(n, 0, m_b_hat);
-    init(n, 0, v_b);
     init(n, 0, v_b_hat);
-    init(n, 0, delta_grad_b);        
-    for (int i = 0; i < n; i++)
+    init(n, 0, delta_b);   
+
+    #pragma opm parallel
     {
-        m_b[i] = rho1 * m_b[i] + (1 - rho1) * db[i];
-        v_b[i] = rho2 * v_b[i] + (1 - rho2) * powf(db[i], 2.0);
-        m_b_hat[i] = m_b[i] / (1 - rho1);
-        v_b_hat[i] = m_b[i] / (1 - rho2);
-        delta_grad_b[i] = -(learning_rate * m_b_hat[i]) / sqrtf(v_b_hat[i] + eps);
-        add(n, delta_grad_b, db);
+        #pragma opm for
+        for (int i = 0; i < n; i++) {
+            m_b[i] = rho1 * m_b[i] + (1 - rho1) * db[i];
+            v_b[i] = rho2 * v_b[i] + (1 - rho2) * powf(db[i], 2.0);
+            m_b_hat[i] = m_b[i] / (1 - rho1);
+            v_b_hat[i] = m_b[i] / (1 - rho2);
+            delta_b[i] = -(learning_rate * m_b_hat[i]) / sqrtf(v_b_hat[i] + eps);
+            b[i] += delta_b[i];
         }
-        
+        #pragma opm for
         for (int i = 0; i < m; i++) {
+            #pragma opm for
             for (int j = 0; j < n; j++) {
                 m_A[i * n + j] = rho1 * m_A[i * n + j] + (1 - rho1) * dA[i * n + j];
                 v_A[i * n + j] = rho2 * v_A[i * n + j] + (1 - rho2) * powf(dA[i * n + j], 2.0);
                 m_A_hat[i * n + j] = m_A[i * n + j] / (1 - rho1);
                 v_A_hat[i * n + j] = m_A[i * n + j] / (1 - rho2);
-                delta_grad_A[i * n + j] = -(learning_rate * m_A_hat[i * n + j]) / sqrtf(v_A_hat[i * n + j] + eps);
-                add(m * n, delta_grad_A, dA);
+                delta_A[i * n + j] = -(learning_rate * m_A_hat[i * n + j]) / sqrtf(v_A_hat[i * n + j] + eps);
+                A[i * n + j] += delta_A[i * n + j];
             }
         }
-    
-    free(m_A);
-    free(m_b);
+    }
+
     free(m_A_hat);
     free(m_b_hat);
-    free(v_A);
-    free(v_b);
     free(v_A_hat);
     free(v_b_hat);
-    free(delta_grad_A);
-    free(delta_grad_b);
+    free(delta_A);
+    free(delta_b);
 }
-
 
 // テスト
 int main(int argc, char const *argv[]) {
@@ -471,7 +470,7 @@ int main(int argc, char const *argv[]) {
     float learning_rate = 0;
     float batch_f = batch_size;
     int i, j, k, l;
-    int rho1, rho2, eps;
+    float rho1, rho2, eps;
 
 
     //変数メモリの確保
@@ -495,8 +494,22 @@ int main(int argc, char const *argv[]) {
     float *db3ave = malloc(sizeof(float) * 100);
     float *db1ave = malloc(sizeof(float) * 50);
     int *index = malloc(sizeof(int) * train_count);
-    float * acc = malloc(sizeof(float) * num_epoch);
-    float * loss = malloc(sizeof(float) * num_epoch);
+    float * acc_save_train = malloc(sizeof(float) * num_epoch);
+    float * loss_save_train = malloc(sizeof(float) * num_epoch);
+    float * acc_save_test = malloc(sizeof(float) * num_epoch);
+    float * loss_save_test = malloc(sizeof(float) * num_epoch);
+    float *m_A1 = malloc(sizeof(float) * 784 * 50);
+    float *m_b1 = malloc(sizeof(float) * 50);
+    float *v_A1 = malloc(sizeof(float) * 784 * 50);
+    float *v_b1 = malloc(sizeof(float) * 50);
+    float *m_A3 = malloc(sizeof(float) * 784 * 50);
+    float *m_b3 = malloc(sizeof(float) * 50);
+    float *v_A3 = malloc(sizeof(float) * 784 * 50);
+    float *v_b3 = malloc(sizeof(float) * 50);
+    float *m_A5 = malloc(sizeof(float) * 784 * 50);
+    float *m_b5 = malloc(sizeof(float) * 50);
+    float *v_A5 = malloc(sizeof(float) * 784 * 50);
+    float *v_b5 = malloc(sizeof(float) * 50);
 
     //パラメタの初期化
     srand((unsigned)time(NULL));
@@ -555,77 +568,108 @@ int main(int argc, char const *argv[]) {
         #pragma omp for
         for (i = 0; i < num_epoch; i++) {
             printf("======epoch %d / %d is running======\n\n", i + 1, num_epoch);
-
             //ランダムシャッフル
             shuffle(train_count, index);
             //勾配降下法（N/n回）
             #pragma omp for
             for (j = 0; j < num_train; j++) {
-                
+
                 //初期化 
+                init(784 * 50, 0, v_A1);
+                init(50 * 100, 0, v_A3);
+                init(100 * 10, 0, v_A5);
+                init(50, 0, v_b1);
+                init(100, 0, v_b3);
+                init(10, 0, v_b5);
+                init(784 * 50, 0, m_A1);
+                init(50 * 100, 0, m_A3);
+                init(100 * 10, 0, m_A5);
+                init(50, 0, m_b1);
+                init(100, 0, m_b3);
+                init(10, 0, m_b5);
                 init(784 * 50, 0, dA1ave);
                 init(50 * 100, 0, dA3ave);
                 init(100 * 10, 0, dA5ave);
                 init(50, 0, db1ave);
                 init(100, 0, db3ave);
                 init(10, 0, db5ave);
-
                 //学習
-                #pragma omp for
-                for (k = 0; k < batch_size; k++) {
                 
+                #pragma omp for
+                for (k = 0; k < batch_size; k++) { 
                     //back prop
+                    printf("\r[%3d/100%%]", ((k + batch_size * j + 1) * 100) / train_count);
                     backward6(A1, b1, A3, b3, A5, b5, train_x + 784 * index[100 * j + k], train_y[index[100 * j + k]], y6, dA1, db1, dA3, db3, dA5, db5);
+                    print(1,10,db5);
                     if(judge == 1){
                         //SGDの実行
                         SGD(784, 50, dA1, dA1ave, db1, db1ave, batch_f, learning_rate, A1, b1);
                         SGD(50, 100, dA3, dA3ave, db3, db3ave, batch_f, learning_rate, A3, b3);
                         SGD(100, 10, dA5, dA5ave, db5, db5ave, batch_f, learning_rate, A5, b5);
                     } else if (judge == 2) {
-                        Adam(784, 50, dA1, db1, learning_rate, rho1, rho2, eps);
-                        Adam(50, 100, dA3, db3, learning_rate, rho1, rho2, eps);
-                        Adam(100, 10, dA5, db5, learning_rate, rho1, rho2, eps);
+                        Adam(784, 50, dA1, db1, A1, b1, m_A1, m_b1, v_A1, v_b1, learning_rate, rho1, rho2, eps);
+                        Adam(50, 100, dA3, db3, A3, b3, m_A3, m_b3, v_A3, v_b3, learning_rate, rho1, rho2, eps);
+                        Adam(100, 10, dA5, db5, A5, b5, m_A5, m_b5, v_A5, v_b5, learning_rate, rho1, rho2, eps);
+                        print(1,10,b5);
                     }
-                 
+                  
                 }
             
-                //プログレスバー
-                if (j == 0){
-                    printf("0%%      100%%\n");
-                    printf("+--------+\n", i + 1);
-                }
-                if (j % (num_train / 10) == 0) {
-                    printf("#");
-                }
             }
 
             //正解率の確認
             int sum_train = 0;
             float loss_train = 0;
             float acc_train = 0;
+            int sum_test = 0;
+            float acc_test = 0;
+            float loss_test = 0;
+
             #pragma omp for
+            for (k = 0; k < train_count; k++) {
+                if (inference6(A1, b1, A3, b3, A5, b5, train_x + 784 * k) == train_y[k]) {
+                    sum_train++;
+                }
+                loss_train += cross_entropy_error(y6, train_y[k]);
+            }
+            acc_train = sum_train * 100.0 / train_count;
+
             for (k = 0; k < test_count; k++) {
                 if (inference6(A1, b1, A3, b3, A5, b5, test_x + 784 * k) == test_y[k]) {
-                sum_train++;
+                    sum_test++;
                 }
+                loss_test += cross_entropy_error(y6, test_y[k]);
             }
-            acc_train = sum_train * 100.0 / test_count;
-            printf("\naccuracy : %f%%\n\n", acc_train);
+            acc_test = sum_test * 100.0 / test_count;
+            printf("\naccuracy(train) : %f%%\n", acc_train);
+            printf("loss(train) : %f\n\n", loss_train);
+            printf("\naccuracy(test) : %f%%\n", acc_test);
+            printf("loss(test) : %f\n\n", loss_test);
             printf("======completed======\n\n", i + 1);
-            #pragma omp for
-            for (l = 0; l < 10; l++) {
-                loss_train += cross_entropy_error(y6, l);
-            }
-
             //各エポックごとの損失と正答率の格納
-            loss[i] = loss_train;
-            acc[i] = acc_train;
+            loss_save_train[i] = loss_train;
+            acc_save_train[i] = acc_train;
+            loss_save_test[i] = loss_test;
+            acc_save_test[i] = acc_test;
         }
     }
     //学習したパラメタの保存
-    save("param1.dat", 50, 784, A1, b1);
-    save("param3.dat", 100, 50, A3, b3);
-    save("param5.dat", 10, 100, A5, b5);
-    save_vector("acc_train.dat", num_epoch, acc);
+    if (judge == 1){
+        save("param1SGD.dat", 50, 784, A1, b1);
+        save("param3SGD.dat", 100, 50, A3, b3);
+        save("param5SGD.dat", 10, 100, A5, b5);
+        save_vector("acc_trainSGD.dat", num_epoch, acc_save_train);
+        save_vector("loss_trainSGD.dat", num_epoch, loss_save_train);
+        save_vector("acc_testSGD.dat", num_epoch, acc_save_test);
+        save_vector("loss_testSGD.dat", num_epoch, loss_save_test);
+    } else if(judge == 2) {
+        save("param1Adam.dat", 50, 784, A1, b1);
+        save("param3Adam.dat", 100, 50, A3, b3);
+        save("param5Adam.dat", 10, 100, A5, b5);
+        save_vector("acc_trainAdam.dat", num_epoch, acc_save_train);
+        save_vector("loss_trainAdam.dat", num_epoch, loss_save_train);
+        save_vector("acc_testAdam.dat", num_epoch, acc_save_test);
+        save_vector("loss_testAdam.dat", num_epoch, loss_save_test);
+    }
     return 0;
 }

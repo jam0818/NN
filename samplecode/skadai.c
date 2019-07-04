@@ -73,6 +73,19 @@ void rand_init(int n, float * o) {
     }
 }
 
+//Box-muller法 正規分布乱数 mu:平均値 sigma:標準偏差
+double box_muller( double mu, double sigma ){
+    double z=sqrt( -2.0*log(GetRandom(0, 1)) ) * sin( 2.0 * 3.141592653589793238462643383279 * GetRandom(0, 1) );
+    return mu + sigma*z;
+}
+
+//heの正規分布で初期化
+void he_init(int n, float*o){
+    for (int i = 0; i < n; i++){
+        o[i] = box_muller(0, sqrt(2.0/n));
+    }
+}
+
 //fc層（順伝播）
 void fc(int m,
         int n,
@@ -263,13 +276,20 @@ void load(const char * filename, int m, int n, float * A, float * b) {
 }
 
 //推論（6層）
-int inference6(const float*A1,const float *b1,const float*A3,const float*b3,const float*A5,const float*b5, const float *x){
+int inference6(const float*A1,
+               const float *b1,
+               const float*A3,
+               const float*b3,
+               const float*A5,
+               const float*b5, 
+               const float *x, 
+               float *y6
+               ){
     float *y1 = malloc(sizeof(float) * 50); // (50,)
     float *y2 = malloc(sizeof(float) * 50); // (50,)
     float *y3 = malloc(sizeof(float) * 100); // (100,)
     float *y4 = malloc(sizeof(float) * 100); // (100,)
     float *y5 = malloc(sizeof(float) * 10); // (50,)
-    float *y6 = malloc(sizeof(float) * 10); // (50,)
     //順伝播は左端の引数が出力値
     fc(50, 784, x, A1, b1, y1);
     relu(50, y1, y2);
@@ -293,7 +313,6 @@ int inference6(const float*A1,const float *b1,const float*A3,const float*b3,cons
     free(y3);
     free(y4);
     free(y5);
-    free(y6);
     return temp;
 
 }
@@ -407,9 +426,9 @@ void Adam(int m,
     init(n, 0, v_b_hat);
     init(n, 0, delta_b);   
 
-    #pragma opm parallel
+    #pragma omp parallel
     {
-        #pragma opm for
+        #pragma omp for
         for (int i = 0; i < n; i++) {
             m_b[i] = rho1 * m_b[i] + (1 - rho1) * db[i];
             v_b[i] = rho2 * v_b[i] + (1 - rho2) * powf(db[i], 2.0);
@@ -418,9 +437,9 @@ void Adam(int m,
             delta_b[i] = -(learning_rate * m_b_hat[i]) / sqrtf(v_b_hat[i] + eps);
             b[i] += delta_b[i];
         }
-        #pragma opm for
+        #pragma omp for
         for (int i = 0; i < m; i++) {
-            #pragma opm for
+            #pragma omp for
             for (int j = 0; j < n; j++) {
                 m_A[i * n + j] = rho1 * m_A[i * n + j] + (1 - rho1) * dA[i * n + j];
                 v_A[i * n + j] = rho2 * v_A[i * n + j] + (1 - rho2) * powf(dA[i * n + j], 2.0);
@@ -558,7 +577,6 @@ int main(int argc, char const *argv[]) {
 
 
     int num_train = train_count / batch_size;
-    float train_f = num_train;
 
     //確率的勾配降下法（エポック回数）
     #ifdef _OPENMP
@@ -600,7 +618,7 @@ int main(int argc, char const *argv[]) {
                     //back prop
                     printf("\r[%3d/100%%]", ((k + batch_size * j + 1) * 100) / train_count);
                     backward6(A1, b1, A3, b3, A5, b5, train_x + 784 * index[100 * j + k], train_y[index[100 * j + k]], y6, dA1, db1, dA3, db3, dA5, db5);
-                    print(1,10,db5);
+
                     if(judge == 1){
                         //SGDの実行
                         SGD(784, 50, dA1, dA1ave, db1, db1ave, batch_f, learning_rate, A1, b1);
@@ -610,7 +628,7 @@ int main(int argc, char const *argv[]) {
                         Adam(784, 50, dA1, db1, A1, b1, m_A1, m_b1, v_A1, v_b1, learning_rate, rho1, rho2, eps);
                         Adam(50, 100, dA3, db3, A3, b3, m_A3, m_b3, v_A3, v_b3, learning_rate, rho1, rho2, eps);
                         Adam(100, 10, dA5, db5, A5, b5, m_A5, m_b5, v_A5, v_b5, learning_rate, rho1, rho2, eps);
-                        print(1,10,b5);
+
                     }
                   
                 }
@@ -627,21 +645,21 @@ int main(int argc, char const *argv[]) {
 
             #pragma omp for
             for (k = 0; k < train_count; k++) {
-                if (inference6(A1, b1, A3, b3, A5, b5, train_x + 784 * k) == train_y[k]) {
+                if (inference6(A1, b1, A3, b3, A5, b5, train_x + 784 * k, y6) == train_y[k]) {
                     sum_train++;
                 }
                 loss_train += cross_entropy_error(y6, train_y[k]);
             }
             acc_train = sum_train * 100.0 / train_count;
-
+            
             for (k = 0; k < test_count; k++) {
-                if (inference6(A1, b1, A3, b3, A5, b5, test_x + 784 * k) == test_y[k]) {
+                if (inference6(A1, b1, A3, b3, A5, b5, test_x + 784 * k, y6) == test_y[k]) {
                     sum_test++;
                 }
                 loss_test += cross_entropy_error(y6, test_y[k]);
             }
             acc_test = sum_test * 100.0 / test_count;
-            printf("\naccuracy(train) : %f%%\n", acc_train);
+            printf("\n\naccuracy(train) : %f%%\n", acc_train);
             printf("loss(train) : %f\n\n", loss_train);
             printf("\naccuracy(test) : %f%%\n", acc_test);
             printf("loss(test) : %f\n\n", loss_test);

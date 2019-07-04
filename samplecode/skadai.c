@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <omp.h>
 #include <time.h>
 #include <math.h>
 #include <stdio.h>
@@ -13,6 +14,7 @@
 #include <limits.h>
 #include <string.h>
 #include "nn.h"
+
 
 //スワップ関数int
 void swapi(int *pa, int *pb){
@@ -79,8 +81,10 @@ void fc(int m,
         const float *b,  // (m,)
         float *y         // (m,)
         ) {
+    #pragma omp parallel for
     for(int i = 0; i < m; i++){
         y[i] = 0;
+        #pragma omp parallel for
         for(int j = 0; j < n; j++){
             y[i] = y[i] + A[j + i * n] * x[j];
         }
@@ -90,6 +94,7 @@ void fc(int m,
 
 //relu層（順伝播）
 void relu(int n, const float * x, float * y) {
+    #pragma omp parallel for
     for (int i = 0; i < n; i++) {
         if (x[i] < 0) {
             y[i] = 0;
@@ -102,15 +107,18 @@ void relu(int n, const float * x, float * y) {
 //softmax層（順伝播）
 void softmax(int n, const float * x, float * y) {
     float max = 0;
+    #pragma omp parallel for
     for (int i = 0; i < n; i++){
         if (max < x[i]){
             max = x[i];
         }
     }
     float sum = 0;
+    #pragma omp parallel for
     for (int i = 0; i < n; i++){
         sum += exp(x[i] - max);
     }
+    #pragma omp parallel for
     for (int i = 0; i < n; i++){
         y[i] = (exp(x[i] - max) / sum);
     }
@@ -144,6 +152,7 @@ int inference3(const float * A, const float * b, const float * x) {
 
 //softmax層（逆伝播）
 void softmaxwithloss_bwd(int n, const float * y, unsigned char t, float * dEdx) {
+    #pragma omp parallel for
     for (int i = 0; i < n; i++) {
         if (i == t) {
             dEdx[i] = y[i] - 1;
@@ -155,6 +164,7 @@ void softmaxwithloss_bwd(int n, const float * y, unsigned char t, float * dEdx) 
 
 //Relu層（逆伝播）
 void relu_bwd(int n, const float * x, const float * dEdy, float * dEdx) {
+    #pragma omp parallel for
     for (int i = 0; i < n; i++) {
         if (x[i] > 0) {
             dEdx[i] = dEdy[i];
@@ -175,52 +185,34 @@ void fc_bwd(int m,
             float *dEdx        // (n,)
             ) {
     //dEdAの計算
+    #pragma omp parallel for
     for (int i = 0; i < m; i++){
+        #pragma omp parallel for
         for (int j = 0; j < n; j++){
             dEdA[j + i * n] = dEdy[i] * x[j];
         }
     }
     //dEdbの計算
+    #pragma omp parallel for
     for (int i = 0; i < m; i++) {
         dEdb[i] = dEdy[i];
     }
     //下流へ転送する勾配
+    #pragma omp parallel for
     for (int i = 0; i < n; i++){
         dEdx[i] = 0;
+        #pragma omp parallel for
         for (int j = 0; j < m ; j++){
             dEdx[i] += A[j * n + i] * dEdy[j];
         }
     }
 }
 
-//back prop(三層)
-void backward3(const float *A, const float *b, const float *x, unsigned char t, float *y, float *dEdA, float *dEdb){
-
-    float *temp_relu=malloc(sizeof(float)*10);
-    fc(10, 784, x, A, b, y);
-
-    relu(10, y, y);
-    for (int i = 0; i < 10; i++) {
-        temp_relu[i] = y[i];
-    }
-
-    softmax(10, y, y);
-
-    float *dEdx=malloc(sizeof(float)*10);
-    softmaxwithloss_bwd(10, y, t, dEdx);
-    relu_bwd(10, temp_relu, dEdx, dEdx);
-    float *dEdx784 = malloc(sizeof(float) * 784);
-
-
-    fc_bwd(10, 784 , x, dEdx, A, dEdA, dEdb, dEdx784);
-    free(temp_relu);
-    free(dEdx);
-    free(dEdx784);
-}
 
 //ランダムシャッフル
 void shuffle(int n, int *x){
     srand(time(NULL));
+    #pragma omp parallel for
     for (int i = 0; i < n;i++){
         int num = rand() % n;
         swapi(&x[i], &x[num]);
@@ -393,7 +385,9 @@ int main(int argc, char const *argv[]) {
     int num_epoch = atoi(argv[3]);
     float learning_late = 0;
     float batch_f = batch_size;
-    
+    int i, j, k, l;
+
+
     //変数メモリの確保
     float *y6 = malloc(sizeof(float) * 10);
     float *A1 = malloc(sizeof(float) * 784 * 50);
@@ -435,8 +429,10 @@ int main(int argc, char const *argv[]) {
     scanf("%f", &learning_late);
     printf("learning rate : %.2f\n", learning_late);
 
+
+
     //[0 : N-1]配列の作成
-    for (int i = 0; i < train_count; i++){
+    for (i = 0; i < train_count; i++){
         index[i] = i;
     }
 
@@ -445,89 +441,98 @@ int main(int argc, char const *argv[]) {
     float train_f = num_train;
 
     //確率的勾配降下法（エポック回数）
-    for (int i = 0; i < num_epoch; i++) {
-        printf("epoch %d / %d is running...\n\n", i + 1, num_epoch);
+    #ifdef _OPENMP
+    #pragma omp parallel
+    #endif
+    {
+        #pragma omp for
+        for (i = 0; i < num_epoch; i++) {
+            printf("epoch %d / %d is running...\n\n", i + 1, num_epoch);
 
-        //ランダムシャッフル
-        shuffle(train_count, index);
-        //勾配降下法（N/n回）
-        for (int j = 0; j < num_train; j++) {
-            //初期化 
-            init(784 * 50, 0, dA1ave);
-            init(50 * 100, 0, dA3ave);
-            init(100 * 10, 0, dA5ave);
-            init(50, 0, db1ave);
-            init(100, 0, db3ave);
-            init(10, 0, db5ave);
+            //ランダムシャッフル
+            shuffle(train_count, index);
+            //勾配降下法（N/n回）
+            #pragma omp for
+            for (j = 0; j < num_train; j++) {
+                //初期化 
+                init(784 * 50, 0, dA1ave);
+                init(50 * 100, 0, dA3ave);
+                init(100 * 10, 0, dA5ave);
+                init(50, 0, db1ave);
+                init(100, 0, db3ave);
+                init(10, 0, db5ave);
 
-            //学習
-            for (int k = 0; k < batch_size; k++) {
+                //学習
+                #pragma omp for
+                for (k = 0; k < batch_size; k++) {
                 
-                //back prop
-                backward6(A1, b1, A3, b3, A5, b5, train_x + 784 * index[100 * j + k], train_y[index[100 * j + k]], y6, dA1, db1, dA3, db3, dA5, db5);
+                    //back prop
+                    backward6(A1, b1, A3, b3, A5, b5, train_x + 784 * index[100 * j + k], train_y[index[100 * j + k]], y6, dA1, db1, dA3, db3, dA5, db5);
                 
-                //aveの計算
-                add(784 * 50, dA1, dA1ave);
-                add(50 * 100, dA3, dA3ave);
-                add(100 * 10, dA5, dA5ave);
-                add(50, db1, db1ave);
-                add(100, db3, db3ave);
-                add(10, db5, db5ave);
-                scale(784 * 50, 1.0 / batch_f, dA1ave);
-                scale(50 * 100, 1.0 / batch_f, dA3ave);
-                scale(100 * 10, 1.0 / batch_f, dA5ave);
-                scale(50, 1.0 / batch_f, db1ave);
-                scale(100, 1.0 / batch_f, db3ave);
-                scale(10, 1.0 / batch_f, db5ave);
-                scale(784 * 50, -1.0 * learning_late, dA1ave);
-                scale(50 * 100, -1.0 * learning_late, dA3ave);
-                scale(100 * 10, -1.0 * learning_late, dA5ave);
-                scale(50, -1.0 * learning_late, db1ave);
-                scale(100, -1.0 * learning_late, db3ave);
-                scale(10, -1.0 * learning_late, db5ave);
-                
-                //パラメタの更新
-                add(784 * 50, dA1ave, A1);
-                add(50 * 100, dA3ave, A3);
-                add(100 * 10, dA5ave, A5);
-                add(50, db1ave, b1);
-                add(100, db3ave, b3);
-                add(10, db5ave, b5);
+                    //aveの計算
+                    add(784 * 50, dA1, dA1ave);
+                    add(50 * 100, dA3, dA3ave);
+                    add(100 * 10, dA5, dA5ave);
+                    add(50, db1, db1ave);
+                    add(100, db3, db3ave);
+                    add(10, db5, db5ave);
+                    scale(784 * 50, 1.0 / batch_f, dA1ave);
+                    scale(50 * 100, 1.0 / batch_f, dA3ave);
+                    scale(100 * 10, 1.0 / batch_f, dA5ave);
+                    scale(50, 1.0 / batch_f, db1ave);
+                    scale(100, 1.0 / batch_f, db3ave);
+                    scale(10, 1.0 / batch_f, db5ave);
+                    scale(784 * 50, -1.0 * learning_late, dA1ave);
+                    scale(50 * 100, -1.0 * learning_late, dA3ave);
+                    scale(100 * 10, -1.0 * learning_late, dA5ave);
+                    scale(50, -1.0 * learning_late, db1ave);
+                    scale(100, -1.0 * learning_late, db3ave);
+                    scale(10, -1.0 * learning_late, db5ave);
+
+                    //パラメタの更新
+                    add(784 * 50, dA1ave, A1);
+                    add(50 * 100, dA3ave, A3);
+                    add(100 * 10, dA5ave, A5);
+                    add(50, db1ave, b1);
+                    add(100, db3ave, b3);
+                    add(10, db5ave, b5);
 
                 
-            }
+                }
             
-            //プログレスバー
-            if (j == 0){
-                printf("0%%      100%%\n");
-                printf("+--------+\n", i + 1);
+                //プログレスバー
+                if (j == 0){
+                    printf("0%%      100%%\n");
+                    printf("+--------+\n", i + 1);
+                }
+                if (j % (num_train / 10) == 0) {
+                    printf("#");
+                }
             }
-            if (j % (num_train / 10) == 0) {
-                printf("#");
-            }
-        }
 
-        //正解率の確認
-        int sum_train = 0;
-        float loss_train = 0;
-        float acc_train = 0;
-        for (int k = 0; k < test_count; k++) {
-            if (inference6(A1, b1, A3, b3, A5, b5, test_x + 784 * k) == test_y[k]) {
-            sum_train++;
+            //正解率の確認
+            int sum_train = 0;
+            float loss_train = 0;
+            float acc_train = 0;
+            #pragma omp for
+            for (k = 0; k < test_count; k++) {
+                if (inference6(A1, b1, A3, b3, A5, b5, test_x + 784 * k) == test_y[k]) {
+                sum_train++;
+                }
             }
-        }
-        acc_train = sum_train * 100.0 / test_count;
-        printf("\naccuracy : %f%%\n\n", acc_train);
-        printf("completed...\n\n", i + 1);
-        for (int l = 0; l < 10; l++) {
-            loss_train = cross_entropy_error(y6, l);
-        }
+            acc_train = sum_train * 100.0 / test_count;
+            printf("\naccuracy : %f%%\n\n", acc_train);
+            printf("completed...\n\n", i + 1);
+            #pragma omp for
+            for (l = 0; l < 10; l++) {
+                loss_train += cross_entropy_error(y6, l);
+            }
 
-        //各エポックごとの損失と正答率の格納
-        loss[i] = loss_train;
-        acc[i] = acc_train;
+            //各エポックごとの損失と正答率の格納
+            loss[i] = loss_train;
+            acc[i] = acc_train;
+        }
     }
-    
     //学習したパラメタの保存
     save("param1.dat", 50, 784, A1, b1);
     save("param3.dat", 100, 50, A3, b3);

@@ -691,7 +691,10 @@ int main(int argc, char const *argv[]) {
                     //back prop
                     printf("\r[%3d/100%%]", ((k + batch_size * j + 1) * 100) / train_count);
                     backward6(A1, b1, A3, b3, A5, b5, train_x + 784 * index[100 * j + k], train_y[index[100 * j + k]], y6, dA1, db1, dA3, db3, dA5, db5);
-                    
+                    if(k % num_train == 0) {
+                        printf("db5 : ");
+                        print(1, 10, db5);
+                    }
                     //最適化
                     if(judge == 1){
                         //SGDの実行
@@ -707,6 +710,14 @@ int main(int argc, char const *argv[]) {
                         AdaDelta(784, 50, dA1, db1, A1, b1, m_A1, m_b1, v_A1, v_b1, rho1, eps);
                         AdaDelta(50, 100, dA3, db3, A3, b3, m_A3, m_b3, v_A3, v_b3, rho1, eps);
                         AdaDelta(100, 10, dA5, db5, A5, b5, m_A5, m_b5, v_A5, v_b5, rho1, eps);
+                        if(k % num_train == 0) {
+                            printf("b5 : ");
+                            print(1, 10, b5);
+                            printf("m_b5 : ");
+                            print(1, 10, m_b5);
+                            printf("v_b5 : ");
+                            print(1, 10, v_b5);
+                        }
                     }
                   
                 }
@@ -778,4 +789,3 @@ int main(int argc, char const *argv[]) {
     }
     return 0;
 }
-

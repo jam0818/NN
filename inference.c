@@ -17,26 +17,7 @@
 #include "nn.h"
 
 
-void SGD(int m, 
-         int n, 
-         float *dA, //(m, n)
-         float *dAave, //(m, n)
-         float *db, //(n,)
-         float *dbave, //(n,)
-         float batch_f, 
-         float learning_rate,  
-         float *A, //(m, n)
-         float *b //(n,)
-         ) {
-    add(m * n, dA, dAave);
-    add(n, db, dbave);
-    scale(m * n, 1.0 / batch_f, dAave);
-    scale(n, 1.0 / batch_f, dbave);
-    scale(m * n, -1.0 * learning_rate, dAave);
-    scale(n, -1.0 * learning_rate, dbave);
-    add(m * n, dAave, A);
-    add(n, dbave, b);
-}
+
 
 //スワップ関数int
 void swapi(int *pa, int *pb){
@@ -126,10 +107,10 @@ void fc(int m,
         const float *b, // (m,)
         float *y // (m,)
         ) {
-    #pragma omp parallel for
+    
     for(int i = 0; i < m; i++){
         y[i] = 0;
-        #pragma omp parallel for
+        
         for(int j = 0; j < n; j++){
             y[i] = y[i] + A[j + i * n] * x[j];
         }
@@ -140,7 +121,7 @@ void fc(int m,
 
 //relu層（順伝播）
 void relu(int n, const float *x, float *y) {
-    #pragma omp parallel for
+    
     for (int i = 0; i < n; i++) {
         if (x[i] < 0) {
             y[i] = 0;
@@ -154,18 +135,18 @@ void relu(int n, const float *x, float *y) {
 //softmax層（順伝播）
 void softmax(int n, const float *x, float *y) {
     float max = 0;
-    #pragma omp parallel for
+    
     for (int i = 0; i < n; i++){
         if (max < x[i]){
             max = x[i];
         }
     }
     float sum = 0;
-    #pragma omp parallel for
+    
     for (int i = 0; i < n; i++){
         sum += exp(x[i] - max);
     }
-    #pragma omp parallel for
+    
     for (int i = 0; i < n; i++){
         y[i] = (exp(x[i] - max) / sum);
     }
@@ -182,6 +163,11 @@ void convolution(int m,
             float *Y //(M - m + 1, N - n + 1)
             ) {
     float bs = *b;
+    //print(M,N,X);
+    //printf("\n");
+    //printf("%f\n\n",bs);
+    //print(5,5,W);
+    //printf("\n");
     for (int i = 0; i < M - m + 1; i++) {
         for (int j = 0; j < N - n + 1; j++) {
             for (int s = 0; s < m; s++) {
@@ -191,6 +177,8 @@ void convolution(int m,
             }
         }
     }
+    //print(M-m+1,N-n+1,Y);
+    //printf("\n");
 }
 
 //maxpooling層（順伝播）
@@ -210,7 +198,7 @@ void maxpooling (int n,
                     }
                 }
             }
-            Y[j + i * (M / n)] = temp;
+            Y[j + i * (N / n)] = temp;
         }
     }
 
@@ -218,7 +206,7 @@ void maxpooling (int n,
 
 //softmax層（逆伝播）
 void softmaxwithloss_bwd(int n, const float *y, unsigned char t, float *dEdx) {
-    #pragma omp parallel for
+    
     for (int i = 0; i < n; i++) {
         if (i == t) {
             dEdx[i] = y[i] - 1;
@@ -230,7 +218,7 @@ void softmaxwithloss_bwd(int n, const float *y, unsigned char t, float *dEdx) {
 
 //Relu層（逆伝播）
 void relu_bwd(int n, const float * x, const float * dEdy, float * dEdx) {
-    #pragma omp parallel for
+    
     for (int i = 0; i < n; i++) {
         if (x[i] > 0) {
             dEdx[i] = dEdy[i];
@@ -251,23 +239,22 @@ void fc_bwd(int m,
             float *dEdx // (n,)
             ) {
     //dEdAの計算
-    #pragma omp parallel for
+    
     for (int i = 0; i < m; i++){
-        #pragma omp parallel for
         for (int j = 0; j < n; j++){
             dEdA[j + i * n] = dEdy[i] * x[j];
         }
     }
     //dEdbの計算
-    #pragma omp parallel for
+    
     for (int i = 0; i < m; i++) {
         dEdb[i] = dEdy[i];
     }
     //下流へ転送する勾配
-    #pragma omp parallel for
+    
     for (int i = 0; i < n; i++){
         dEdx[i] = 0;
-        #pragma omp parallel for
+        
         for (int j = 0; j < m ; j++){
             dEdx[i] += A[j * n + i] * dEdy[j];
         }
@@ -286,15 +273,21 @@ void convolution_bwd(int m,
                     const float *W, //(m, n)
                     float *dX //(M, N)
                     ){
-                        float dbs = *db;
-                        for (int s = 0; s < m; s++) {
-                            for (int t = 0; t < n; t++) {
-                                for (int i = 0; i < M - m + 1; i++) {
-                                    for (int j = 0; j < N - n + 1; j++) {
-                                        dW[s * n + t] += dY[i * (N - n + 1) + j] * X[t + s * N + i * N + j];
-                                    }
-                                }
-                            }
+    //print(M - m + 1, N - n + 1, dY);
+    //printf("dY\n");
+    float dbs = *db;
+    for (int s = 0; s < m; s++)
+    {
+        for (int t = 0; t < n; t++)
+        {
+            for (int i = 0; i < M - m + 1; i++)
+            {
+                for (int j = 0; j < N - n + 1; j++)
+                {
+                    dW[s * n + t] += dY[i * (N - n + 1) + j] * X[t + s * N + i * N + j];
+                }
+            }
+        }
                         }
                         for (int i = 0; i < M - m + 1; i++) {
                             for (int j = 0; j < N - n + 1; j++) {
@@ -311,26 +304,36 @@ void convolution_bwd(int m,
                         }
                         for (int i = m - 1; i < M; i++) {
                             for (int j = 0; j < N + n - 1; j++) {
-                                if(j < n - 1 || j > n - 1 + N) {
+                                if(j < n - 1 || j > N - 1) {
                                     dY_p[j + i*(N + n - 1)] = 0;
+                                } else {
+                                    dY_p[j + i*(N + n - 1)] = dY[j - (n - 1) + (i - (m - 1)) * (N - n + 1)];
                                 }
                             }
                         }
-                        for (int i = M; i < M + m - 1; i++) {
-                            for (int j = 0; j < N + n - 1; j++) {
-                                    dY_p[j + i*(N + n - 1)] = 0;
-                            }
-                        }
 
+                        for (int i = M; i < M + m - 1; i++)
+                        {
+                            for (int j = 0; j < N + n - 1; j++)
+                                {
+                                    dY_p[j + i*(N + n - 1)] = 0;
+                                }
+                        }
+                        //print(M + m - 1, N + n - 1,dY_p);
+                        //printf("dY_p\n");
+                        //print(m, n, W);
+                        //printf("W\n");
                         for (int i = 0; i < M; i++) {
                             for (int j = 0; j < N; j++) {
                                 for (int s = 0; s < m; s++) {
                                     for (int t = 0; t < n; t++){
-                                        dX[j + i * N] += dY_p[t + s * N + i * N + j] * W[(m - s) * n + (n - t)];
+                                        dX[j + i * N] += dY_p[i*(N + n - 1) + j + t + s * (N + n - 1)] * W[(m - 1 - s) * n + (n - 1 - t)];
                                     }
                                 }
                             }
                         }
+                        //print(M, N, dX);
+                        //printf("dX\n");
                         free(dY_p);
 }
 
@@ -343,12 +346,16 @@ void maxpooling_bwd (int n,
                      float *dY, //(M / n, N / n)
                      float *dX //(M, N)) 
                     ){
+    //print((M / n),(N / n),Y);
+    //printf("Y\n");
+    //print(M,N,X);
+    //printf("X\n");
     for (int i = 0; i < M / n; i++) {
         for (int j = 0; j < N / n; j++) {
             for (int s = 0; s < n; s++) {
                 for (int t = 0; t < n; t++){
-                        if (Y[j + i * (M / n)] == X[j * n + i * n * N + t + s * N]){
-                            dX[j * n + i * n * N + t + s * N] = dY[j + i * (M / n)];
+                        if (Y[j + i * (N / n)] == X[j * n + i * n * N + t + s * N]){
+                            dX[j * n + i * n * N + t + s * N] = dY[j + i * (N / n)];
                         } else {
                             dX[j * n + i * n * N + t + s * N] = 0;
                         }
@@ -356,13 +363,14 @@ void maxpooling_bwd (int n,
                 }
             }
         }
+    
 }
 
 
 //ランダムシャッフル
 void shuffle(int n, int *x){
     srand(time(NULL));
-    #pragma omp parallel for
+    
     for (int i = 0; i < n;i++){
         int num = rand() % n;
         swapi(&x[i], &x[num]);
@@ -484,7 +492,10 @@ void backward6(const float *W1, //(5, 5)
                float *dA7, //(16, 10)
                float *db7 //(10,)
                ){
-
+    print(5,5,W1);
+    printf("W1\n");
+    print(5,5,W3);
+    printf("W3\n");
     float *y1 = malloc(sizeof(float) *24*24);
     float *y2 = malloc(sizeof(float) *24*24);
     float *y3 = malloc(sizeof(float) *12*12);
@@ -492,14 +503,41 @@ void backward6(const float *W1, //(5, 5)
     float *y5 = malloc(sizeof(float) *8*8);
     float *y6 = malloc(sizeof(float) *4*4);
     float *y7 = malloc(sizeof(float) *10);
+    init(24*24,0,y1);
+    init(24*24,0,y2);
+    init(12*12,0,y3);
+    init(8*8,0,y4);
+    init(8*8,0,y5);
+    init(4*4,0,y6);
+    init(10,0,y7);
     convolution(5,5,28,28,W1,b1,x,y1);
+    //print(24,24,y1);
+    //printf("\n");
     relu(24*24,y1,y2);
+    //print(24,24,y2);
+    //printf("\n");
     maxpooling(2,24,24,y2,y3);
+    //print(12,12,y3);
+    //printf("\n");
     convolution(5,5,12,12,W3,b3,y3,y4);
+    print(8,8,y4);
+    printf("y4\n");
     relu(8*8,y4,y5);
+    print(8,8,y5);
+    printf("y5\n"); 
     maxpooling(2,8,8,y5,y6);
+    print(4,4,y6);
+    printf("y6\n");
+    print(10, 16, A7);
+    printf("A7\n");
+    print(1, 10, b7);
+    printf("b7\n");
     fc(10,16,y6,A7,b7,y7);
+    print(1,10,y7);
+    printf("y7\n");
     softmax(10,y7,y8);
+    print(1,10,y8);
+    printf("y8\n");
     float *dx1 = malloc(sizeof(float) *28*28);
     float *dx2 = malloc(sizeof(float) *24*24);
     float *dx3 = malloc(sizeof(float) *24*24);
@@ -508,16 +546,36 @@ void backward6(const float *W1, //(5, 5)
     float *dx6 = malloc(sizeof(float) *8*8);
     float *dx7 = malloc(sizeof(float) *16);
     float *dx8 = malloc(sizeof(float) *10);
-
+    init(28*28,0,dx1);
+    init(24*24,0,dx2);
+    init(24*24,0,dx3);
+    init(12*12,0,dx4);
+    init(8*8,0,dx5);
+    init(8*8,0,dx6);
+    init(16,0,dx7);
+    init(10,0,dx8);
     softmaxwithloss_bwd(10,y8,t,dx8);
+    print(1,10,dx8);
+    printf("dx8\n");    
     fc_bwd(10,16,y6,dx8,A7,dA7,db7,dx7);
-    maxpooling_bwd(2,4,4,y5,y6,dx7,dx6);
+    print(10, 16, dA7);
+    printf("dA7\n");
+    print(4,4,dx7);
+    printf("dx7\n"); 
+    maxpooling_bwd(2,8,8,y5,y6,dx7,dx6);
+    print(8,8,dx6);
+    printf("dx6\n");  
     relu_bwd(8*8,y4,dx6,dx5);
-    convolution_bwd(5,5,8,8,dx5,dW3,db3,y3,W3,dx4);
-    maxpooling_bwd(2,4,4,y2,y3,dx4,dx3);    
+    convolution_bwd(5,5,12,12,dx5,dW3,db3,y3,W3,dx4);
+    //print(12, 12, dx4);
+    //printf("dx4\n");  
+    maxpooling_bwd(2,24,24,y2,y3,dx4,dx3);    
     relu_bwd(24*24,y1,dx3,dx2);
     convolution_bwd(5,5,28,28,dx2,dW1,db1,x,W1,dx1);
-
+    //print(5,5,dW1);
+    //printf("dW1\n");
+    //print(5,5,dW3);
+    //printf("dW3\n");
     free(y1);
     free(y2);
     free(y3);

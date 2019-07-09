@@ -17,43 +17,7 @@
 #include "nn.h"
 
 
-//ベクトル化関数
-void unroll(int m,
-            int n,
-            float matrix[m][n], //(m, n)
-            float vector[m * n] //(m * n,)←ただしこれは(m, n)として扱う場合が多いかもしれない
-            ) {
-                for(int i = 0; i < m; i++) {
-                    for(int j = 0; j < n; j++) {
-                        vector[j + i * n] = matrix[i][j];
-                    }
-                }
-}
 
-//行列化関数
-void makematrix(int m, 
-                int n,
-                float matrix[m][n], //(m, n)
-                float vector[m * n] //(m * n,)←ただしこれは(m, n)として扱う場合が多いかもしれない
-                ) {
-                for(int i = 0; i < m; i++) {
-                    for(int j = 0; j < n; j++) {
-                        matrix[i][j] = vector[j + i * n];
-                    }
-                }
-}
-
-void makematrixc(int m, 
-                int n,
-                float matrix[m][n], //(m, n)
-                const float vector[m * n] //(m * n,)←ただしこれは(m, n)として扱う場合が多いかもしれない
-                ) {
-                for(int i = 0; i < m; i++) {
-                    for(int j = 0; j < n; j++) {
-                        matrix[i][j] = vector[j + i * n];
-                    }
-                }
-}
 
 //スワップ関数int
 void swapi(int *pa, int *pb){
@@ -71,37 +35,22 @@ void swap(float *pa, float *pb){
 }
 
 //ベクトルの足し算
-void add(int n, const float * x, float o[n]) {
+void add(int n, const float * x, float *o) {
     for(int i = 0; i < n; i++){
         o[i] = x[i] + o[i];
     }
 }
 
-void addmatrix (int m, int n, float x[m][n], float o[m][n]) {
-    for(int i = 0; i < m; i++) {
-        for(int j = 0; j < n; j++) {
-        o[i][j] += x[i][j];            
-        }
-    }
-}
 
 //指定した値で初期化
-void init(int n, float x, float o[n]) {
+void init(int n, float x, float *o) {
     for(int i = 0; i < n; i++) {
         o[i] = x;
     }
 }
 
-void initmatrix(int m, int n, float x, float o[m][n]) {
-    for(int i = 0; i < m; i++) {
-        for(int j = 0; j < n; j++) {
-        o[i][j] = x;            
-        }
-    }
-}
-
 //行列の表示
-void print(int m, int n, const float x[m * n]) {
+void print(int m, int n, const float *x) {
     for(int i = 0; i < m ; i++){
         for(int j = 0; j < n; j++){
             printf("%.4f ", x[j + i * n]);
@@ -111,19 +60,12 @@ void print(int m, int n, const float x[m * n]) {
 }
 
 //スカラー倍
-void scale(int n, float x, float o[n]) {
+void scale(int n, float x, float *o) {
     for (int i = 0; i < n; i++) {
         o[i] *= x;
     }    
 }
 
-void scalematrix(int m, int n, float x, float o[m][n]) {
-    for(int i = 0; i < m; i++) {
-        for(int j = 0; j < n; j++) {
-        o[i][j] *= x;            
-        }
-    }
-}
 
 //一定の範囲での乱数生成関数
 float GetRandom(float min,float max){
@@ -131,19 +73,12 @@ float GetRandom(float min,float max){
 }
 
 //初期化関数
-void rand_init(int n, float o[n]) {
+void rand_init(int n, float *o) {
     for(int i = 0; i < n; i++) {
         o[i] = GetRandom(-1, 1);
     }
 }
 
-void rand_initmatrix(int m, int n, float o[m][n]) {
-    for(int i = 0; i < m; i++) {
-        for(int j = 0; j < n; j++) {
-        o[i][j] = GetRandom(-1, 1);            
-        }
-    }
-}
 
 //0 < x < 1の乱数
 double Uniform( void ){
@@ -167,15 +102,15 @@ void he_init(int n, float o[n]){
 //fc層（順伝播）
 void fc(int m,
         int n,
-        const float x[], // (n,)
-        const float A[], // (m, n)
-        const float b[], // (m,)
-        float y[] // (m,)
+        const float *x, // (n,)
+        const float *A, // (m, n)
+        const float *b, // (m,)
+        float *y // (m,)
         ) {
-    
+    #pragma omp parallel for
     for(int i = 0; i < m; i++){
         y[i] = 0;
-        
+        #pragma omp parallel for
         for(int j = 0; j < n; j++){
             y[i] = y[i] + A[j + i * n] * x[j];
         }
@@ -185,8 +120,8 @@ void fc(int m,
 
 
 //relu層（順伝播）
-void relu(int n, const float x[n], float y[n]) {
-    
+void relu(int n, const float *x, float *y) {
+    #pragma omp parallel for
     for (int i = 0; i < n; i++) {
         if (x[i] < 0) {
             y[i] = 0;
@@ -196,82 +131,43 @@ void relu(int n, const float x[n], float y[n]) {
     }
 }
 
-void relumatrix1(const float X[][24], float Y[][24]) {
-    for (int i = 0; i < 24; i++) {
-        for (int j = 0; j < 24; j++) {
-            if (X[i][j] < 0) {
-                Y[i][j] = 0;
-            } else {
-                Y[i][j] = X[i][j];
-            }
-        }
-    }
-}
-
-void relumatrix2(const float X[][8], float Y[][8]) {
-    for (int i = 0; i < 8; i++) {
-        for (int j = 0; j < 8; j++) {
-            if (X[i][j] < 0) {
-                Y[i][j] = 0;
-            } else {
-                Y[i][j] = X[i][j];
-            }
-        }
-    }
-}
-
 
 //softmax層（順伝播）
-void softmax(int n, const float x[], float y[]) {
+void softmax(int n, const float *x, float *y) {
     float max = 0;
-    
+    #pragma omp parallel for
     for (int i = 0; i < n; i++){
         if (max < x[i]){
             max = x[i];
         }
     }
     float sum = 0;
-    
+    #pragma omp parallel for
     for (int i = 0; i < n; i++){
         sum += exp(x[i] - max);
     }
-    
+    #pragma omp parallel for
     for (int i = 0; i < n; i++){
         y[i] = (exp(x[i] - max) / sum);
     }
 }
 
 //畳み込み層（順伝播）
-void convolution1 (
-            const float W[5][5], //(m, n)
-            const float b, //(M - m + 1, N - n + 1)
-            const float X[28][28], //(M, N)
-            float Y[24][24] //(M - m + 1, N - n + 1)
+void convolution(int m,
+            int n,
+            int M,
+            int N,
+            const float *W, //(m, n)
+            const float *b,
+            const float *X, //(M, N)
+            float *Y //(M - m + 1, N - n + 1)
             ) {
-
-    for (int i = 0; i < 24; i++) {
-        for (int j = 0; j < 24; j++) {
-            for (int s = 0; s < 5; s++) {
-                for (int t = 0; t < 5; t++){
-                    Y[i][j] += W[s][t] * X[i + s][j + t] + b;
-                }
-            }
-        }
-    }
-}
-
-void convolution2 (
-            const float W[5][5], //(m, n)
-            const float b, //(M - m + 1, N - n + 1)
-            const float X[12][12], //(M, N)
-            float Y[8][8] //(M - m + 1, N - n + 1)
-            ) {
-
-    for (int i = 0; i < 8; i++) {
-        for (int j = 0; j < 8; j++) {
-            for (int s = 0; s < 5; s++) {
-                for (int t = 0; t < 5; t++){
-                    Y[i][j] += W[s][t] * X[i + s][j + t] + b;
+    float bs = *b;
+    for (int i = 0; i < M - m + 1; i++) {
+        for (int j = 0; j < N - n + 1; j++) {
+            for (int s = 0; s < m; s++) {
+                for (int t = 0; t < n; t++){
+                    Y[j + i * (N - n + 1)] += W[t + s * n] * X[t + s * N + i * N + j] + bs;
                 }
             }
         }
@@ -279,51 +175,31 @@ void convolution2 (
 }
 
 //maxpooling層（順伝播）
-void maxpooling1 (
-                 const float X[24][24], //(M, N)
-                 float Y[12][12] //(M - m + 1, N - n + 1)
+void maxpooling (int n,
+                 int M,
+                 int N,
+                 const float *X, //(M, N)
+                 float *Y //(M / n, N / n)
                  ) {
-    int n = 2;
-    for (int i = 0; i < 12; i++) {
-        for (int j = 0; j < 12; j++) {
+    for (int i = 0; i < M / n; i++) {
+        for (int j = 0; j < N / n; j++) {
             float temp = 0;
-            for (int s = 0; s < 2; s++) {
-                for (int t = 0; t < 2; t++){
-                    if (X[n * i + s][n * j + t] > temp) {
-                        temp = X[n * i + s][n * j + t];
+            for (int s = 0; s < n; s++) {
+                for (int t = 0; t < n; t++){
+                    if (X[j * n + i * n * N + t + s * N] > temp) {
+                        temp = X[j * n + i * n * N + t + s * N];
                     }
                 }
             }
-            Y[i][j] = temp;
-        }
-    }
-
-}
-
-void maxpooling2 (
-                 const float X[8][8], //(M, N)
-                 float Y[4][4] //(M - m + 1, N - n + 1)
-                 ) {
-    int n = 2;
-    for (int i = 0; i < 4; i++) {
-        for (int j = 0; j < 4; j++) {
-            float temp = 0;
-            for (int s = 0; s < 2; s++) {
-                for (int t = 0; t < 2; t++){
-                    if (X[n * i + s][n * j + t] > temp) {
-                        temp = X[n * i + s][n * j + t];
-                    }
-                }
-            }
-            Y[i][j] = temp;
+            Y[j + i * (M / n)] = temp;
         }
     }
 
 }
 
 //softmax層（逆伝播）
-void softmaxwithloss_bwd(int n, const float y[10], unsigned char t, float dEdx[10]) {
-    
+void softmaxwithloss_bwd(int n, const float *y, unsigned char t, float *dEdx) {
+    #pragma omp parallel for
     for (int i = 0; i < n; i++) {
         if (i == t) {
             dEdx[i] = y[i] - 1;
@@ -335,7 +211,7 @@ void softmaxwithloss_bwd(int n, const float y[10], unsigned char t, float dEdx[1
 
 //Relu層（逆伝播）
 void relu_bwd(int n, const float * x, const float * dEdy, float * dEdx) {
-    
+    #pragma omp parallel for
     for (int i = 0; i < n; i++) {
         if (x[i] > 0) {
             dEdx[i] = dEdy[i];
@@ -345,130 +221,75 @@ void relu_bwd(int n, const float * x, const float * dEdy, float * dEdx) {
     }
 }
 
-void relumatrix_bwd1(const float X[8][8], const float dY[8][8], float dX[8][8]) {
-    for (int i = 0; i < 8; i++) {
-        for(int j = 0; j < 8; j++) {
-            if (X[i][j] > 0) {
-                dX[i][j] = dY[i][j];
-            } else {
-                dX[i][j] = 0;
-            }
-        }
-    }
-}
-
-void relumatrix_bwd2(const float X[24][24], const float dY[24][24], float dX[24][24]) {
-    for (int i = 0; i < 24; i++) {
-        for(int j = 0; j < 24; j++) {
-            if (X[i][j] > 0) {
-                dX[i][j] = dY[i][j];
-            } else {
-                dX[i][j] = 0;
-            }
-        }
-    }
-}
-
 //fc層（逆伝播）
-void fc_bwd(
-            const float x[16],    // (n,)
-            const float dEdy[10], // (m,)
-            const float A[160],    // (m, n)
-            float dEdA[160],       // (m, n)
-            float dEdb[10],       // (m,)
-            float dEdx[16]        // (n,)
+void fc_bwd(int m,
+            int n,
+            const float *x, // (n,)
+            const float *dEdy, // (m,)
+            const float *A, // (m, n)
+            float *dEdA, // (m, n)
+            float *dEdb,  // (m,)
+            float *dEdx // (n,)
             ) {
     //dEdAの計算
-    
-    for (int i = 0; i < 10; i++){
-        
-        for (int j = 0; j < 16; j++){
-            dEdA[j + i * 16] = dEdy[i] * x[j];
+    #pragma omp parallel for
+    for (int i = 0; i < m; i++){
+        #pragma omp parallel for
+        for (int j = 0; j < n; j++){
+            dEdA[j + i * n] = dEdy[i] * x[j];
         }
     }
     //dEdbの計算
-    
-    for (int i = 0; i < 10; i++) {
+    #pragma omp parallel for
+    for (int i = 0; i < m; i++) {
         dEdb[i] = dEdy[i];
     }
     //下流へ転送する勾配
-    
-    for (int i = 0; i < 16; i++){
+    #pragma omp parallel for
+    for (int i = 0; i < n; i++){
         dEdx[i] = 0;
-        
-        for (int j = 0; j < 10 ; j++){
-            dEdx[i] += A[j * 16 + i] * dEdy[j];
+        #pragma omp parallel for
+        for (int j = 0; j < m ; j++){
+            dEdx[i] += A[j * n + i] * dEdy[j];
         }
     }
 }
 
 //convolution層（逆伝播）
-void convolution_bwd1(
-                    float dX[][12],
-                    float dY[][8],
-                    float dW[][5], //(m, n)
-                    float db,
-                    float X[][12],
-                    const float W[][5] //(m, n)
+void convolution_bwd(int m,
+                    int n,
+                    int M,
+                    int N,
+                    float *dY, //(M - m + 1, N - n + 1)
+                    float *dW, //(m, n)
+                    float *db,
+                    const float *X, //(M, N)
+                    const float *W, //(m, n)
+                    float *dX //(M, N)
                     ){
-                        for (int s = 0; s < 5; s++) {
-                            for (int t = 0; t < 5; t++) {
-                                for (int i = 0; i < 8; i++) {
-                                    for (int j = 0; j < 8; j++) {
-                                        dW[s][t] += dY[i][j] * X[i + s][j + t];
+                        float dbs = *db;
+                        for (int s = 0; s < m; s++) {
+                            for (int t = 0; t < n; t++) {
+                                for (int i = 0; i < M - m + 1; i++) {
+                                    for (int j = 0; j < N - n + 1; j++) {
+                                        dW[s * n + t] += dY[i * (N - n + 1) + j] * X[t + s * N + i * N + j];
                                     }
                                 }
                             }
                         }
-                        for (int i = 0; i < 8; i++) {
-                            for (int j = 0; j < 8; j++) {
-                                db += dY[i][j];
+                        for (int i = 0; i < M - m + 1; i++) {
+                            for (int j = 0; j < N - n + 1; j++) {
+                                dbs += dY[i * (N - n + 1) + j];
                             }
                         }
-                        for (int i = 0; i < 8; i++) {
-                            for (int j = 0; j < 8; j++) {
-                                for (int s = 0; s < 5; s++) {
-                                    for (int t = 0; t < 5; t++){
+                        for (int i = 0; i < M - m + 1; i++) {
+                            for (int j = 0; j < N - n + 1; j++) {
+                                for (int s = 0; s < m; s++) {
+                                    for (int t = 0; t < n; t++){
                                         if (i - s < 0 || j - t < 0) {
-                                            dY[i - s][j - t] = 0;
+                                            dY[j * n + i * n * N - t - s * N] = 0;
                                         }
-                                        X[i][j] += dY[i - s][j - t] * W[s][t];
-                                    }
-                                }
-                            }
-                        }
-}
-
-void convolution_bwd2(
-                    float dX[][24],
-                    float dY[][28],
-                    float dW[][5], //(m, n)
-                    float db,
-                    float X[][28],
-                    const float W[][5] //(m, n)
-                    ){
-                        for (int s = 0; s < 5; s++) {
-                            for (int t = 0; t < 5; t++) {
-                                for (int i = 0; i < 24; i++) {
-                                    for (int j = 0; j < 24; j++) {
-                                        dW[s][t] += dY[i][j] * X[i + s][j + t];
-                                    }
-                                }
-                            }
-                        }
-                        for (int i = 0; i < 24; i++) {
-                            for (int j = 0; j < 24; j++) {
-                                db += dY[i][j];
-                            }
-                        }
-                        for (int i = 0; i < 24; i++) {
-                            for (int j = 0; j < 24; j++) {
-                                for (int s = 0; s < 5; s++) {
-                                    for (int t = 0; t < 5; t++){
-                                        if (i - s < 0 || j - t < 0) {
-                                            dY[i - s][j - t] = 0;
-                                        }
-                                        X[i][j] += dY[i - s][j - t] * W[s][t];
+                                        dX[s * n + t] += dY[j * n + i * n * N - t - s * N] * W[s * n + t];
                                     }
                                 }
                             }
@@ -476,21 +297,22 @@ void convolution_bwd2(
 }
 
 //maxpooling層（逆伝播）
-void maxpooling_bwd1 (
-                     float X[][8],
-                     float Y[][4],
-                     float dX[][8],
-                     float dY[][4]
-                     ) {
-    int n = 2;
-    for (int i = 0; i < 8 / n; i++) {
-        for (int j = 0; j < 8 / n; j++) {
+void maxpooling_bwd (int n,
+                     int M,
+                     int N,
+                     float *X, //(M, N)
+                     float *Y, //(M / n, N / n)
+                     float *dY, //(M / n, N / n)
+                     float *dX //(M, N)) 
+                    ){
+    for (int i = 0; i < M / n; i++) {
+        for (int j = 0; j < N / n; j++) {
             for (int s = 0; s < n; s++) {
                 for (int t = 0; t < n; t++){
-                        if (Y[i][j] == X[i * n + s][j * n + t]){
-                            dX[i * n + s][j * n + t] = dY[i][j];
+                        if (Y[j + i * (M / n)] == X[j * n + i * n * N + t + s * N]){
+                            dX[j * n + i * n * N + t + s * N] = dY[j + i * (M / n)];
                         } else {
-                            dX[i * n + s][j * n + t] = 0;
+                            dX[j * n + i * n * N + t + s * N] = 0;
                         }
                     }
                 }
@@ -498,32 +320,11 @@ void maxpooling_bwd1 (
         }
 }
 
-void maxpooling_bwd2 (
-                     float X[][24],
-                     float Y[][12],
-                     float dX[][24],
-                     float dY[][12]
-                     ) {
-    int n = 2;
-    for (int i = 0; i < 24 / n; i++) {
-        for (int j = 0; j < 24 / n; j++) {
-            for (int s = 0; s < n; s++) {
-                for (int t = 0; t < n; t++){
-                        if (Y[i][j] == X[i * n + s][j * n + t]){
-                            dX[i * n + s][j * n + t] = dY[i][j];
-                        } else {
-                            dX[i * n + s][j * n + t] = 0;
-                        }
-                    }
-                }
-            }
-        }
-}
 
 //ランダムシャッフル
 void shuffle(int n, int *x){
     srand(time(NULL));
-    
+    #pragma omp parallel for
     for (int i = 0; i < n;i++){
         int num = rand() % n;
         swapi(&x[i], &x[num]);
@@ -578,14 +379,14 @@ void load(const char * filename, int m, int n, float * A, float * b) {
 //SGD
 void SGD(int m, 
          int n, 
-         float dA[m*n], //(m, n)
-         float dAave[m*n], //(m, n)
-         float db[n], //(n,)
-         float dbave[n], //(n,)
+         float *dA, //(m, n)
+         float *dAave, //(m, n)
+         float *db, //(n,)
+         float *dbave, //(n,)
          float batch_f, 
          float learning_rate,  
-         float A[m*n], //(m, n)
-         float b[n] //(n,)
+         float *A, //(m, n)
+         float *b //(n,)
          ) {
     add(m * n, dA, dAave);
     add(n, db, dbave);
@@ -597,157 +398,85 @@ void SGD(int m,
     add(n, dbave, b);
 }
 
-void SGDmatrix(int m, 
-               int n, 
-               float dA[][n], //(m, n)
-               float dAave[][n], //(m, n)
-               float db, //(n,)
-               float dbave, //(n,)
-               float batch_f, 
-               float learning_rate,  
-               float A[][n], //(m, n)
-               float b //(n,))
-               ) {
-    addmatrix(m , n, dA, dAave);
-    dbave += db;
-    scalematrix(m , n, 1.0 / batch_f, dAave);
-    dbave *= 1.0 / batch_f;
-    scalematrix(m , n, -1.0 * learning_rate, dAave);
-    dbave *= -1.0 * learning_rate;
-    addmatrix(m , n, dAave, A);
-    b += dbave;
-               }
 
 
 //推論（6層）
-int inference6(const float W1[][5],
-               const float W3[][5],
-               const float A7[16 * 10], //(16,10)
-               const float x[784],
-               const float b1,
-               const float b3,
-               const float b7[10],
-               float y8[10] //(10,)
+int inference6(
                ){
-    float X1[28][28];
-    initmatrix(28,28,0,X1);
-    makematrixc(28,28,X1,x);
-    float Y1[24][24];
-    float Y2[24][24];
-    float Y3[12][12];
-    float Y4[8][8];
-    float Y5[8][8];
-    float Y6[4][4];
-    float y6[16];
-    float y7[10];
-    initmatrix(24,24,0,Y1);
-    initmatrix(24,24,0,Y2);
-    initmatrix(12,12,0,Y3);
-    initmatrix(8,8,0,Y4);
-    initmatrix(8,8,0,Y5);
-    initmatrix(4,4,0,Y6);
-    init(16,0,y6);
-    init(10,0,y7);
-    convolution1(W1,b1,X1,Y1);
-    relumatrix1(Y1,Y2);
-    maxpooling1(Y2,Y3);
-    convolution2(W3,b3,Y3,Y4);
-    relumatrix2(Y4,Y5);
-    maxpooling2(Y5,Y6);
-    unroll(4,4,Y6,y6);
-    fc(4,4,y6,A7,b7,y7);
-    softmax(10,y7,y8);
-    int temp = 1;
-    float M = 0;
-    for (int i = 0; i < 10; i++){
-        if (M < y6[i]){
-            M = y8[i];
-        }
-    }
-    for (int i = 0; i < 10; i++){
-        if (M == y8[i])
-        temp = i;
-    }     
 
-    return temp;
-
+    return 0;
 }
 
 //back prop（6層）
-void backward6(const float W1[5][5],
-               const float W3[5][5],
-               const float A7[16 * 10], //(16,10)
-               const float x[784],
-               float y8[10], //(10,)
-               const float b1,
-               const float b3,
-               const float b7[10],
+void backward6(const float *W1, //(5, 5)
+               const float *W3, //(5, 5)
+               const float *A7, //(16, 10)
+               const float *x, //(28, 28)
+               float *y8, //(10,)
+               const float *b1, 
+               const float *b3,
+               const float *b7, //(10,)
                unsigned char t,
-               float dW1[5][5],
-               float dW3[5][5],
-               float db1,
-               float db3,
-               float dA7[16 * 10], //(16,10)
-               float db7[10] //(4,)
+               float *dW1, //(5, 5)
+               float *dW3, //(5, 5)
+               float *db1,
+               float *db3,
+               float *dA7, //(16, 10)
+               float *db7 //(10,)
                ){
-    float X1[28][28];
-    initmatrix(28,28,0,X1);
-    makematrixc(28,28,X1,x);
-    float Y1[24][24];
-    float Y2[24][24];
-    float Y3[12][12];
-    float Y4[8][8];
-    float Y5[8][8];
-    float Y6[4][4];
-    float y6[16];
-    float y7[10];
-    initmatrix(24,24,0,Y1);
-    initmatrix(24,24,0,Y2);
-    initmatrix(12,12,0,Y3);
-    initmatrix(8,8,0,Y4);
-    initmatrix(8,8,0,Y5);
-    initmatrix(4,4,0,Y6);
-    init(16,0,y6);
-    init(10,0,y7);
-    convolution1(W1,b1,X1,Y1);
-    relumatrix1(Y1,Y2);
-    maxpooling1(Y2,Y3);
-    convolution2(W3,b3,Y3,Y4);
-    relumatrix2(Y4,Y5);
-    maxpooling2(Y5,Y6);
-    unroll(4,4,Y6,y6);
-    fc(4,4,y6,A7,b7,y7);
+
+    float *y1 = malloc(sizeof(float) *24*24);
+    float *y2 = malloc(sizeof(float) *24*24);
+    float *y3 = malloc(sizeof(float) *12*12);
+    float *y4 = malloc(sizeof(float) *8*8);
+    float *y5 = malloc(sizeof(float) *8*8);
+    float *y6 = malloc(sizeof(float) *4*4);
+    float *y7 = malloc(sizeof(float) *10);
+    convolution(5,5,28,28,W1,b1,x,y1);
+    relu(24*24,y1,y2);
+    maxpooling(2,24,24,y2,y3);
+    convolution(5,5,12,12,W3,b3,y3,y4);
+    relu(12*12,y4,y5);
+    maxpooling(2,8,8,y5,y6);
+    fc(10,16,y6,A7,b7,y7);
     softmax(10,y7,y8);
-    float dX1[28][28];
-    float dX2[24][24];
-    float dX3[24][24];
-    float dX4[12][12];
-    float dX5[8][8];
-    float dX6[8][8];
-    float dX7[4][4];
-    float dx7[16];
-    float dx8[10];
-    initmatrix(28,28,0,dX1);                 
-    initmatrix(24,24,0,dX2);               
-    initmatrix(24,24,0,dX3);
-    initmatrix(12,12,0,dX4);
-    initmatrix(12,12,0,dX5);
-    initmatrix(8,8,0,dX6);
-    initmatrix(4,4,0,dX7);
-    init(16,0,dx7);
-    init(10,0,dx8);
+    float *dx1 = malloc(sizeof(float) *24*24);
+    float *dx2 = malloc(sizeof(float) *24*24);
+    float *dx3 = malloc(sizeof(float) *24*24);
+    float *dx4 = malloc(sizeof(float) *24*24);
+    float *dx5 = malloc(sizeof(float) *24*24);
+    float *dx6 = malloc(sizeof(float) *24*24);
+    float *dx7 = malloc(sizeof(float) *24*24);
+    float *dx8 = malloc(sizeof(float) *24*24);
+
     softmaxwithloss_bwd(10,y8,t,dx8);
-    fc_bwd(y6,dx8,A7,dA7,db7,dx7);
-    makematrix(4,4,dX7,dx7);
-    maxpooling_bwd1(Y5,Y6,dX6,dX7);
-    relumatrix_bwd1(Y4,dX6,dX5);
-    convolution_bwd1(dX4,dX5,dW3,db3,Y3,W3);
-    maxpooling_bwd2(Y2,Y3,dX3,dX4);
-    relumatrix_bwd2(Y1,dX3,dX2);
-    convolution_bwd2(dX2,dX1,dW1,db1,X1,W1);
+    fc_bwd(10,16,y6,dx8,A7,dA7,db7,dx7);
+    maxpooling_bwd(2,4,4,y5,y6,dx7,dx6);
+    relu_bwd(8*8,y4,dx6,dx5);
+    convolution_bwd(5,5,8,8,dx5,dW3,db3,y3,W3,dx4);
+    maxpooling_bwd(2,4,4,y2,y3,dx4,dx3);    
+    relu_bwd(24*24,y1,dx3,dx2);
+    convolution_bwd(5,5,28,28,dx2,dW1,db1,x,W1,dx1);
+
+    free(y1);
+    free(y2);
+    free(y3);
+    free(y4);
+    free(y5);
+    free(y6);
+    free(y7);
+
+    free(dx1);
+    free(dx2);
+    free(dx3);
+    free(dx4);
+    free(dx5);
+    free(dx6);
+    free(dx7);
+    free(dx8);
+
 
 } 
-
 
 // テスト
 int main(int argc, char const *argv[]) {
@@ -778,48 +507,43 @@ int main(int argc, char const *argv[]) {
     int num_epoch = atoi(argv[3]);
     float learning_rate = 0;
     float batch_f = batch_size;
-    int i, j, k, l;
-    float rho1, rho2, eps;
+    int i, j, k;
 
     //変数の設定
-    float W1[5][5];
-    float W3[5][5];
-    float A7[16 * 10];
-    float x[784] = {0};
-    float y8[10] = {0};
-    float b1;
-    float b3;
-    float b7[10] = {0};
-    unsigned char t;
-    float dW1[5][5] = {0};
-    float dW3[5][5] = {0};
-    float db1 = {0};
-    float db3 = {0};
-    float dA7[16 * 10] = {0};
-    float db7[10] = {0};  
-    float dW1ave[5][5] = {0};
-    float dW3ave[5][5] = {0};
-    float db1ave = {0};
-    float db3ave = {0};
-    float dA7ave[16 * 10] = {0};
-    float db7ave[10] = {0};  
+
 
     //変数メモリの確保
     int *index = malloc(sizeof(int) * train_count);
-    float *acc_save_train = malloc(sizeof(float) *num_epoch);
-    float *loss_save_train = malloc(sizeof(float) *num_epoch);
-    float *acc_save_test = malloc(sizeof(float) *num_epoch);
-    float *loss_save_test = malloc(sizeof(float) *num_epoch);
-
+    float * acc_save_train = malloc(sizeof(float) * num_epoch);
+    float * loss_save_train = malloc(sizeof(float) * num_epoch);
+    float * acc_save_test = malloc(sizeof(float) * num_epoch);
+    float * loss_save_test = malloc(sizeof(float) * num_epoch);
+    float *y8 = malloc(sizeof(float) *10);
+    float *W1 = malloc(sizeof(float) * 5 * 5);
+    float *W3 = malloc(sizeof(float) * 5 * 5);
+    float *A7 = malloc(sizeof(float) * 10 * 16);
+    float b1 = GetRandom(-1,1);
+    float b3 = GetRandom(-1,1);
+    float *b7 = malloc(sizeof(float) * 10);
+    float *dW1ave = malloc(sizeof(float) * 5 * 5);
+    float *dW3ave = malloc(sizeof(float) * 5 * 5);
+    float *dA7ave = malloc(sizeof(float) * 10 * 16);
+    float *db7ave = malloc(sizeof(float) * 10);
+    float db1ave = 0;
+    float db3ave = 0;
+    float db1 = 0;
+    float db3 = 0;
+    float *dW1 = malloc(sizeof(float) * 5 * 5);
+    float *dW3 = malloc(sizeof(float) * 5 * 5);
+    float *dA7 = malloc(sizeof(float) * 10 * 16);
+    float *db7 = malloc(sizeof(float) * 10);
 
     //パラメタの初期化
     srand((unsigned)time(NULL));
-    rand_initmatrix(5,5,W1);
-    rand_initmatrix(5,5,W3);
-    rand_init(16 * 10,A7);
-    rand_init(4,b7);
-    db1 = GetRandom(-1,1);
-    db3 = GetRandom(-1,1);
+    rand_init(5*5,W1);
+    rand_init(5*5,W3);
+    rand_init(10*16,A7);
+    rand_init(10,b7);
     
 
     //ハイパーパラメータの確認と設定、optimizerの選択
@@ -856,85 +580,45 @@ int main(int argc, char const *argv[]) {
             for (j = 0; j < num_train; j++) {
 
                 //初期化 
-
+                init(5*5,0,dW1);
+                init(5*5,0,dW3);
+                init(5*5,0,dW1ave);
+                init(5*5,0,dW3ave);
+                init(10*16,0,A7);
+                init(10,0,b7);
+                db1ave = 0;
+                db3ave = 0;
+                db1 = 0;
+                db3 = 0;
 
                 //学習
                 #pragma omp for
                 for (k = 0; k < batch_size; k++) { 
                     //back prop
                     printf("\r[%3d/100%%]", ((k + batch_size * j + 1) * 100) / train_count);
-                    backward6(W1,W3,A7,train_x + 784 * index[100 * j + k], y8, b1, b3, b7, train_y[index[100 * j + k]], dW1, dW3, db1, db3, dA7, db7);
+                    backward6(W1,W3,A7,train_x + 784 * index[100 * j + k],y8,&b1, &b3,b7,train_y[index[100 * j + k]],dW1,dW3,&db1,&db3,dA7,db7);
 
-                    addmatrix(5 , 5, dW1, dW1ave);
-                    db1ave += db1;
-                    scalematrix(5 , 5, 1.0 / batch_f, dW1ave);
-                    db1ave *= 1.0 / batch_f;
-                    scalematrix(5 , 5, -1.0 * learning_rate, dW1ave);
-                    db1ave *= -1.0 * learning_rate;
-                    addmatrix(5 , 5, dW1ave, W1);
-                    b1 += db1ave;
 
-                    addmatrix(5 , 5, dW3, dW3ave);
-                    db3ave += db3;
-                    scalematrix(5 , 5, 1.0 / batch_f, dW3ave);
-                    db3ave *= 1.0 / batch_f;
-                    scalematrix(5 , 5, -1.0 * learning_rate, dW3ave);
-                    db3ave *= -1.0 * learning_rate;
-                    addmatrix(5 , 5, dW3ave, W3);
-                    b3 += db3ave;
-
-                        add(16 * 10, dA7, dA7ave);
-                    add(10, db7, db7ave);
-                    scale(16 * 10, 1.0 / batch_f, dA7ave);
-                    scale(10, 1.0 / batch_f, db7ave);
-                    scale(16 * 10, -1.0 * learning_rate, dA7ave);
-                    scale(10, -1.0 * learning_rate, db7ave);
-                    add(16 * 10, dA7ave, A7);
-                    add(10, db7ave, b7);
+                    SGD(5,5,dW1,dW1ave,&db1,&db1ave,batch_f,learning_rate,W1,&b1);
+                    SGD(5,5,dW3,dW3ave,&db3,&db3ave,batch_f,learning_rate,W3,&b3);
                     SGD(16,10,dA7,dA7ave,db7,db7ave,batch_f,learning_rate,A7,b7);
+                    
+                  
                 }
             
             }
 
             //正解率の確認
             int sum_train = 0;
-            
             float loss_train = 0;
             float acc_train = 0;
             int sum_test = 0;
             float acc_test = 0;
             float loss_test = 0;
-            #pragma omp for
-            for (k = 0; k < train_count; k++) {
-                if (inference6(W1,W3,A7, train_x + 784 * k, b1, b3, b7, y8) == train_y[k]) {
-                    sum_train++;
-                }
-                loss_train += cross_entropy_error(y8, train_y[k]);
-            }
-            acc_train = sum_train * 100.0 / train_count;
-            
-            #pragma omp for
-            for (k = 0; k < test_count; k++) {
-                if (inference6(W1,W3,A7, train_x + 784 * k, b1, b3, b7, y8) == test_y[k]) {
-                    sum_test++;
-                }
-                loss_test += cross_entropy_error(y8, test_y[k]);
-            }
-            acc_test = sum_test * 100.0 / test_count;
-            printf("\n\naccuracy(train) : %f%%\n", acc_train);
-            printf("loss(train) : %f\n\n", loss_train);
-            printf("\naccuracy(test) : %f%%\n", acc_test);
-            printf("loss(test) : %f\n\n", loss_test);
-            printf("======completed======\n\n", i + 1);
-            //各エポックごとの損失と正答率の格納
-            loss_save_train[i] = loss_train;
-            acc_save_train[i] = acc_train;
-            loss_save_test[i] = loss_test;
-            acc_save_test[i] = acc_test;
-            }
+
 
         }
-    
+    }
     //学習したパラメタの保存
 
     return 0;

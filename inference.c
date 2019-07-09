@@ -287,9 +287,10 @@ void convolution_bwd(int m,
                                 for (int s = 0; s < m; s++) {
                                     for (int t = 0; t < n; t++){
                                         if (i - s < 0 || j - t < 0) {
-                                            dY[j * n + i * n * N - t - s * N] = 0;
+
+                                        } else {
+                                            dX[t + s * N + i * N + j] += dY[- t - s*N + i*N + j] * W[s * n + t];
                                         }
-                                        dX[s * n + t] += dY[j * n + i * n * N - t - s * N] * W[s * n + t];
                                     }
                                 }
                             }
@@ -401,8 +402,33 @@ void SGD(int m,
 
 
 //推論（6層）
-int inference6(
+int inference6(const float *W1, //(5, 5)
+               const float *W3, //(5, 5)
+               const float *A7, //(16, 10)
+               const float *b1, 
+               const float *b3,
+               const float *b7, //(10,)
+               const float *x, //(28, 28)
+               float *y8 //(10,)
                ){
+    float *y1 = malloc(sizeof(float) *24*24);
+    float *y2 = malloc(sizeof(float) *24*24);
+    float *y3 = malloc(sizeof(float) *12*12);
+    float *y4 = malloc(sizeof(float) *8*8);
+    float *y5 = malloc(sizeof(float) *8*8);
+    float *y6 = malloc(sizeof(float) *4*4);
+    float *y7 = malloc(sizeof(float) *10);
+    convolution(5,5,28,28,W1,b1,x,y1);
+    relu(24*24,y1,y2);
+    maxpooling(2,24,24,y2,y3);
+    convolution(5,5,12,12,W3,b3,y3,y4);
+    relu(8*8,y4,y5);
+    maxpooling(2,8,8,y5,y6);
+    fc(10,16,y6,A7,b7,y7);
+    softmax(10,y7,y8);               
+
+
+
 
     return 0;
 }
@@ -436,18 +462,18 @@ void backward6(const float *W1, //(5, 5)
     relu(24*24,y1,y2);
     maxpooling(2,24,24,y2,y3);
     convolution(5,5,12,12,W3,b3,y3,y4);
-    relu(12*12,y4,y5);
+    relu(8*8,y4,y5);
     maxpooling(2,8,8,y5,y6);
     fc(10,16,y6,A7,b7,y7);
     softmax(10,y7,y8);
-    float *dx1 = malloc(sizeof(float) *24*24);
+    float *dx1 = malloc(sizeof(float) *28*28);
     float *dx2 = malloc(sizeof(float) *24*24);
     float *dx3 = malloc(sizeof(float) *24*24);
-    float *dx4 = malloc(sizeof(float) *24*24);
-    float *dx5 = malloc(sizeof(float) *24*24);
-    float *dx6 = malloc(sizeof(float) *24*24);
-    float *dx7 = malloc(sizeof(float) *24*24);
-    float *dx8 = malloc(sizeof(float) *24*24);
+    float *dx4 = malloc(sizeof(float) *12*12);
+    float *dx5 = malloc(sizeof(float) *8*8);
+    float *dx6 = malloc(sizeof(float) *8*8);
+    float *dx7 = malloc(sizeof(float) *16);
+    float *dx8 = malloc(sizeof(float) *10);
 
     softmaxwithloss_bwd(10,y8,t,dx8);
     fc_bwd(10,16,y6,dx8,A7,dA7,db7,dx7);
@@ -615,7 +641,34 @@ int main(int argc, char const *argv[]) {
             int sum_test = 0;
             float acc_test = 0;
             float loss_test = 0;
-
+            
+            #pragma omp for
+            for (k = 0; k < train_count; k++) {
+                if (inference6(W1,W3,A7,&b1,&b3,b7, train_x + 784 * k, y8) == train_y[k]) {
+                    sum_train++;
+                }
+                loss_train += cross_entropy_error(y8, train_y[k]);
+            }
+            acc_train = sum_train * 100.0 / train_count;
+            
+            #pragma omp for
+            for (k = 0; k < test_count; k++) {
+                if (inference6(W1,W3,A7,&b1,&b3,b7, train_x + 784 * k, y8) == test_y[k]) {
+                    sum_test++;
+                }
+                loss_test += cross_entropy_error(y8, test_y[k]);
+            }
+            acc_test = sum_test * 100.0 / test_count;
+            printf("\n\naccuracy(train) : %f%%\n", acc_train);
+            printf("loss(train) : %f\n\n", loss_train / train_count);
+            printf("\naccuracy(test) : %f%%\n", acc_test);
+            printf("loss(test) : %f\n\n", loss_test / test_count);
+            printf("======completed======\n\n", i + 1);
+            //各エポックごとの損失と正答率の格納
+            loss_save_train[i] = loss_train;
+            acc_save_train[i] = acc_train;
+            loss_save_test[i] = loss_test;
+            acc_save_test[i] = acc_test;
 
         }
     }

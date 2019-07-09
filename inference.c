@@ -41,6 +41,13 @@ void add(int n, const float * x, float *o) {
     }
 }
 
+//ベクトルの足し算
+void addscale(int n, float s,const float * x, float *o) {
+    for(int i = 0; i < n; i++){
+        o[i] = s * x[i] + o[i];
+    }
+}
+
 
 //指定した値で初期化
 void init(int n, float x, float *o) {
@@ -254,7 +261,6 @@ void fc_bwd(int m,
     
     for (int i = 0; i < n; i++){
         dEdx[i] = 0;
-        
         for (int j = 0; j < m ; j++){
             dEdx[i] += A[j * n + i] * dEdy[j];
         }
@@ -395,6 +401,19 @@ void save(const char *filename, int m, int n, const float *A, const float*b){
     }
 }
 
+void save_kernel(const char *filename, int m, int n, const float *A, const float*b){
+    
+    FILE *fp;
+    if((fp = fopen(filename,"wb"))==NULL){
+        printf("\aファイルをオープンできません。\n");
+    } else {
+        fwrite(A, sizeof(float), m * n, fp);
+        fwrite(b, sizeof(float), 1, fp);
+        fclose(fp);
+    }
+}
+
+
 void save_vector(const char *filename, int n, const float *V){
     
     FILE *fp;
@@ -435,6 +454,10 @@ int inference6(const float *W1, //(5, 5)
                const float *x, //(28, 28)
                float *y8 //(10,)
                ){
+    //print(5,5,W1);
+    //printf("W1\n");
+    //print(5,5,W3);
+    //printf("W3\n");
     float *y1 = malloc(sizeof(float) *24*24);
     float *y2 = malloc(sizeof(float) *24*24);
     float *y3 = malloc(sizeof(float) *12*12);
@@ -442,15 +465,42 @@ int inference6(const float *W1, //(5, 5)
     float *y5 = malloc(sizeof(float) *8*8);
     float *y6 = malloc(sizeof(float) *4*4);
     float *y7 = malloc(sizeof(float) *10);
-    convolution(5,5,28,28,W1,b1,x,y1);
-    relu(24*24,y1,y2);
-    maxpooling(2,24,24,y2,y3);
-    convolution(5,5,12,12,W3,b3,y3,y4);
-    relu(8*8,y4,y5);
-    maxpooling(2,8,8,y5,y6);
-    fc(10,16,y6,A7,b7,y7);
-    softmax(10,y7,y8);               
 
+    init(24*24,0,y1);
+    init(24*24,0,y2);
+    init(12*12,0,y3);
+    init(8*8,0,y4);
+    init(8*8,0,y5);
+    init(4*4,0,y6);
+    init(10,0,y7);
+    convolution(5,5,28,28,W1,b1,x,y1);
+    //print(24,24,y1);
+    //printf("y1\n");
+    relu(24*24,y1,y2);
+    //print(24,24,y2);
+    //printf("y2\n");
+    maxpooling(2,24,24,y2,y3);
+    //print(12,12,y3);
+    //printf("y3\n");
+    convolution(5,5,12,12,W3,b3,y3,y4);
+    //print(8,8,y4);
+    //printf("y4\n");
+    relu(8*8,y4,y5);
+    //rint(8,8,y5);
+    //printf("y5\n"); 
+    maxpooling(2,8,8,y5,y6);
+    //print(4,4,y6);
+    //printf("y6\n");
+    //print(10, 16, A7);
+    //printf("A7\n");
+    //print(1, 10, b7);
+    //printf("b7\n");
+    fc(10,16,y6,A7,b7,y7);
+    //print(1,10,y7);
+    //printf("y7\n");
+    softmax(10,y7,y8);
+    //print(1,10,y8);
+    //printf("y8\n");
     int temp = 1;
     float M = 0;
     for (int i = 0; i < 10; i++){
@@ -461,8 +511,7 @@ int inference6(const float *W1, //(5, 5)
     for (int i = 0; i < 10; i++){
         if (M == y8[i])
         temp = i;
-    }     
-
+    }
     free(y1);
     free(y2);
     free(y3);
@@ -483,19 +532,19 @@ void backward6(const float *W1, //(5, 5)
                float *y8, //(10,)
                const float *b1, 
                const float *b3,
-               const float *b7, //(10,)
+               const float *b7, 
                unsigned char t,
                float *dW1, //(5, 5)
                float *dW3, //(5, 5)
                float *db1,
                float *db3,
                float *dA7, //(16, 10)
-               float *db7 //(10,)
+               float *db7 
                ){
-    print(5,5,W1);
-    printf("W1\n");
-    print(5,5,W3);
-    printf("W3\n");
+    //print(5,5,W1);
+    //printf("W1\n");
+    //print(5,5,W3);
+    //printf("W3\n");
     float *y1 = malloc(sizeof(float) *24*24);
     float *y2 = malloc(sizeof(float) *24*24);
     float *y3 = malloc(sizeof(float) *12*12);
@@ -503,6 +552,7 @@ void backward6(const float *W1, //(5, 5)
     float *y5 = malloc(sizeof(float) *8*8);
     float *y6 = malloc(sizeof(float) *4*4);
     float *y7 = malloc(sizeof(float) *10);
+
     init(24*24,0,y1);
     init(24*24,0,y2);
     init(12*12,0,y3);
@@ -512,32 +562,32 @@ void backward6(const float *W1, //(5, 5)
     init(10,0,y7);
     convolution(5,5,28,28,W1,b1,x,y1);
     //print(24,24,y1);
-    //printf("\n");
+    //printf("y1\n");
     relu(24*24,y1,y2);
     //print(24,24,y2);
-    //printf("\n");
+    //printf("y2\n");
     maxpooling(2,24,24,y2,y3);
     //print(12,12,y3);
-    //printf("\n");
+    //printf("y3\n");
     convolution(5,5,12,12,W3,b3,y3,y4);
-    print(8,8,y4);
-    printf("y4\n");
+    //print(8,8,y4);
+    //printf("y4\n");
     relu(8*8,y4,y5);
-    print(8,8,y5);
-    printf("y5\n"); 
+    //rint(8,8,y5);
+    //printf("y5\n"); 
     maxpooling(2,8,8,y5,y6);
-    print(4,4,y6);
-    printf("y6\n");
-    print(10, 16, A7);
-    printf("A7\n");
-    print(1, 10, b7);
-    printf("b7\n");
+    //print(4,4,y6);
+    //printf("y6\n");
+    //print(10, 16, A7);
+    //printf("A7\n");
+    //print(1, 10, b7);
+    //printf("b7\n");
     fc(10,16,y6,A7,b7,y7);
-    print(1,10,y7);
-    printf("y7\n");
+    //print(1,10,y7);
+    //printf("y7\n");
     softmax(10,y7,y8);
-    print(1,10,y8);
-    printf("y8\n");
+    //print(1,10,y8);
+    //printf("y8\n");
     float *dx1 = malloc(sizeof(float) *28*28);
     float *dx2 = malloc(sizeof(float) *24*24);
     float *dx3 = malloc(sizeof(float) *24*24);
@@ -555,16 +605,16 @@ void backward6(const float *W1, //(5, 5)
     init(16,0,dx7);
     init(10,0,dx8);
     softmaxwithloss_bwd(10,y8,t,dx8);
-    print(1,10,dx8);
-    printf("dx8\n");    
+    //print(1,10,dx8);
+    //printf("dx8\n");    
     fc_bwd(10,16,y6,dx8,A7,dA7,db7,dx7);
-    print(10, 16, dA7);
-    printf("dA7\n");
-    print(4,4,dx7);
-    printf("dx7\n"); 
+    //print(10, 16, dA7);
+    //printf("dA7\n");
+    //print(4,4,dx7);
+    //printf("dx7\n"); 
     maxpooling_bwd(2,8,8,y5,y6,dx7,dx6);
-    print(8,8,dx6);
-    printf("dx6\n");  
+    //print(8,8,dx6);
+    //printf("dx6\n");  
     relu_bwd(8*8,y4,dx6,dx5);
     convolution_bwd(5,5,12,12,dx5,dW3,db3,y3,W3,dx4);
     //print(12, 12, dx4);
@@ -595,6 +645,20 @@ void backward6(const float *W1, //(5, 5)
 
 
 } 
+void SGD(int m, 
+         int n, 
+         float *dAave, //(m, n)
+         float *dbave, //(n,)
+         float batch_f, 
+         float learning_rate,  
+         float *A, //(m, n)
+         float *b
+         ) {
+    scale(m * n, -1.0 * learning_rate, dAave);
+    scale(n, -1.0 * learning_rate, dbave);
+    add(m * n, dAave, A);
+    add(n, dbave, b);
+}
 // テスト
 int main(int argc, char const *argv[]) {
     float * train_x = NULL;
@@ -619,7 +683,7 @@ int main(int argc, char const *argv[]) {
     int num_dim = 784;//atoi(argv[1]);
     int batch_size = 100;//atoi(argv[2]);
     int num_epoch = 10;//atoi(argv[3]);
-    float learning_rate = 0.1;
+    float learning_rate = 0.2;
     float batch_f = batch_size;
     int i, j, k;
 
@@ -633,8 +697,8 @@ int main(int argc, char const *argv[]) {
     float *W1 = malloc(sizeof(float) * 5 * 5);
     float *W3 = malloc(sizeof(float) * 5 * 5);
     float *A7 = malloc(sizeof(float) * 10 * 16);
-    float b1 = GetRandom(-1,1);
-    float b3 = GetRandom(-1,1);
+    float b1 = 0;
+    float b3 = 0;
     float *b7 = malloc(sizeof(float) * 10);
     float *dW1ave = malloc(sizeof(float) * 5 * 5);
     float *dW3ave = malloc(sizeof(float) * 5 * 5);
@@ -654,12 +718,12 @@ int main(int argc, char const *argv[]) {
     float * loss_save_test = malloc(sizeof(float) * num_epoch);
     //パラメタの初期化
     srand((unsigned)time(NULL));
-    rand_init(5*5,W1);
-    rand_init(5*5,W3);
-    rand_init(10*16,A7);
-    rand_init(10,b7);
-    
-
+    he_init(5*5,W1);
+    he_init(5*5,W3);
+    he_init(10*16,A7);
+    he_init(10,b7);
+    b1 = GetRandom(0,1);
+    b3 = GetRandom(0,1);
     //ハイパーパラメータの確認と設定、optimizerの選択
     printf("batch : %d\n",batch_size);
     printf("dim : %d\n",num_dim);
@@ -695,8 +759,10 @@ int main(int argc, char const *argv[]) {
                 init(5*5,0,dW3);
                 init(5*5,0,dW1ave);
                 init(5*5,0,dW3ave);
+                init(10*16,0,dA7ave);
                 init(10*16,0,dA7);
                 init(10,0,db7);
+                init(10,0,db7ave);
                 db1ave = 0;
                 db3ave = 0;
                 db1 = 0;
@@ -707,16 +773,34 @@ int main(int argc, char const *argv[]) {
                 for (k = 0; k < batch_size; k++) { 
                     //back prop
                     printf("\r[%3d/100%%]", ((k + batch_size * j + 1) * 100) / train_count);
-                    backward6(W1,W3,A7,train_x + 784 * index[100 * j + k],y8,&b1, &b3,b7,train_y[index[100 * j + k]],dW1,dW3,&db1,&db3,dA7,db7);
+                    init(5*5,0,dW1);
+                    init(5*5,0,dW3);
+                    db1 = 0;
+                    db3 = 0;
 
-
-                    SGD(5,5,dW1,dW1ave,&db1,&db1ave,batch_f,learning_rate,W1,&b1);
-                    SGD(5,5,dW3,dW3ave,&db3,&db3ave,batch_f,learning_rate,W3,&b3);
-                    SGD(16,10,dA7,dA7ave,db7,db7ave,batch_f,learning_rate,A7,b7);
-                    
-                  
+                    backward6(W1,W3,A7,train_x + 784 * index[batch_size * j + k],y8,&b1, &b3,b7,train_y[index[batch_size * j + k]],dW1,dW3,&db1,&db3,dA7,db7);
+                   // print(10, 16, dA7);
+                    //printf("dA7\n");
+                    addscale(5 * 5,1/batch_f, dW1, dW1ave);
+                    addscale(1, 1/batch_f,&db1, &db3ave);
+                    addscale(5 * 5,1/batch_f, dW3, dW3ave);
+                    addscale(1,1/batch_f, &db3, &db3ave);
+                    addscale(10*16,1/batch_f, dA7, dA7ave);
+                    addscale(1, 1/batch_f,db7, db7ave);       
+                    SGD(5,5,dW1ave,&db1ave,batch_f,learning_rate,W1,&b1);
+                    SGD(5,5,dW3ave,&db3ave,batch_f,learning_rate,W3,&b3);
+                    SGD(16,10,dA7ave,db7ave,batch_f,learning_rate,A7,b7);   
+                    //print(5, 5, dW1);
+                    //printf("dW1\n");
+                    //print(5, 5, dW3);
+                    //printf("dW3\n");
+                    //print(5, 5, dW1ave);
+                    //printf("dW1\n");
+                    //print(5, 5, dW3ave);
+                    //printf("dW3\n");
                 }
-            
+          
+                //print(10, 16,dA7ave);
             }
 
             //正解率の確認
@@ -728,7 +812,10 @@ int main(int argc, char const *argv[]) {
             float acc_test = 0;
             float loss_test = 0;
             
-            
+            print(5,5,W1);
+            printf("W1\n");
+            print(5,5,W3);
+            printf("W3\n");
             for (k = 0; k < train_count; k++) {
                 if (inference6(W1,W3,A7,&b1,&b3,b7, train_x + 784 * k, y8) == train_y[k]) {
                     sum_train++;
@@ -736,10 +823,12 @@ int main(int argc, char const *argv[]) {
                 loss_train += cross_entropy_error(y8, train_y[k]);
             }
             acc_train = sum_train * 100.0 / train_count;
+
             
             
-            for (k = 0; k < test_count; k++) {
-                if (inference6(W1,W3,A7,&b1,&b3,b7, train_x + 784 * k, y8) == test_y[k]) {
+            for (int l = 0; l < test_count;  l++)
+            {
+                if (inference6(W1,W3,A7,&b1,&b3,b7, test_x + 784 * l, y8) == test_y[l]) {
                     sum_test++;
                 }
                 loss_test += cross_entropy_error(y8, test_y[k]);
@@ -760,6 +849,8 @@ int main(int argc, char const *argv[]) {
         }
     }
     //学習したパラメタの保存
-
+    save_kernel("paramW1.dat", 5, 5, W1, &b1);
+    save_kernel("paramW3.dat", 5, 5, W3, &b3);
+    save("paramA7", 16, 10, A7, b7);
     return 0;
 }

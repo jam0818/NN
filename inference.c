@@ -17,7 +17,26 @@
 #include "nn.h"
 
 
-
+void SGD(int m, 
+         int n, 
+         float *dA, //(m, n)
+         float *dAave, //(m, n)
+         float *db, //(n,)
+         float *dbave, //(n,)
+         float batch_f, 
+         float learning_rate,  
+         float *A, //(m, n)
+         float *b //(n,)
+         ) {
+    add(m * n, dA, dAave);
+    add(n, db, dbave);
+    scale(m * n, 1.0 / batch_f, dAave);
+    scale(n, 1.0 / batch_f, dbave);
+    scale(m * n, -1.0 * learning_rate, dAave);
+    scale(n, -1.0 * learning_rate, dbave);
+    add(m * n, dAave, A);
+    add(n, dbave, b);
+}
 
 //スワップ関数int
 void swapi(int *pa, int *pb){

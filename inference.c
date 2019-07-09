@@ -282,15 +282,13 @@ void convolution_bwd(int m,
                                 dbs += dY[i * (N - n + 1) + j];
                             }
                         }
-                        for (int i = 0; i < M - m + 1; i++) {
-                            for (int j = 0; j < N - n + 1; j++) {
+                        for (int i = 0; i < M; i++) {
+                            for (int j = 0; j < N; j++) {
                                 for (int s = 0; s < m; s++) {
                                     for (int t = 0; t < n; t++){
-                                        if (i - s < 0 || j - t < 0) {
-
-                                        } else {
-                                            dX[t + s * N + i * N + j] += dY[- t - s*N + i*N + j] * W[s * n + t];
-                                        }
+                                        if (i - s > 0 &&  j - t > 0) {
+                                            dX[i * (N - n + 1) + j] += dY[- t - s*N + i*N + j] * W[s * n + t];
+                                        } 
                                     }
                                 }
                             }

@@ -107,10 +107,10 @@ void fc(int m,
         const float *b, // (m,)
         float *y // (m,)
         ) {
-    
+    #pragma omp parallel for
     for(int i = 0; i < m; i++){
         y[i] = 0;
-        
+        #pragma omp parallel for
         for(int j = 0; j < n; j++){
             y[i] = y[i] + A[j + i * n] * x[j];
         }
@@ -121,7 +121,7 @@ void fc(int m,
 
 //relu層（順伝播）
 void relu(int n, const float *x, float *y) {
-    
+    #pragma omp parallel for
     for (int i = 0; i < n; i++) {
         if (x[i] < 0) {
             y[i] = 0;
@@ -135,18 +135,18 @@ void relu(int n, const float *x, float *y) {
 //softmax層（順伝播）
 void softmax(int n, const float *x, float *y) {
     float max = 0;
-    
+    #pragma omp parallel for
     for (int i = 0; i < n; i++){
         if (max < x[i]){
             max = x[i];
         }
     }
     float sum = 0;
-    
+    #pragma omp parallel for
     for (int i = 0; i < n; i++){
         sum += exp(x[i] - max);
     }
-    
+    #pragma omp parallel for
     for (int i = 0; i < n; i++){
         y[i] = (exp(x[i] - max) / sum);
     }
@@ -199,7 +199,7 @@ void maxpooling (int n,
 
 //softmax層（逆伝播）
 void softmaxwithloss_bwd(int n, const float *y, unsigned char t, float *dEdx) {
-    
+    #pragma omp parallel for
     for (int i = 0; i < n; i++) {
         if (i == t) {
             dEdx[i] = y[i] - 1;
@@ -211,7 +211,7 @@ void softmaxwithloss_bwd(int n, const float *y, unsigned char t, float *dEdx) {
 
 //Relu層（逆伝播）
 void relu_bwd(int n, const float * x, const float * dEdy, float * dEdx) {
-    
+    #pragma omp parallel for
     for (int i = 0; i < n; i++) {
         if (x[i] > 0) {
             dEdx[i] = dEdy[i];
@@ -232,23 +232,23 @@ void fc_bwd(int m,
             float *dEdx // (n,)
             ) {
     //dEdAの計算
-    
+    #pragma omp parallel for
     for (int i = 0; i < m; i++){
-        
+        #pragma omp parallel for
         for (int j = 0; j < n; j++){
             dEdA[j + i * n] = dEdy[i] * x[j];
         }
     }
     //dEdbの計算
-    
+    #pragma omp parallel for
     for (int i = 0; i < m; i++) {
         dEdb[i] = dEdy[i];
     }
     //下流へ転送する勾配
-    
+    #pragma omp parallel for
     for (int i = 0; i < n; i++){
         dEdx[i] = 0;
-        
+        #pragma omp parallel for
         for (int j = 0; j < m ; j++){
             dEdx[i] += A[j * n + i] * dEdy[j];
         }
@@ -282,17 +282,37 @@ void convolution_bwd(int m,
                                 dbs += dY[i * (N - n + 1) + j];
                             }
                         }
+
+                        //パディング
+                        float *dY_p = malloc(sizeof(float) * (N + n - 1)*(M + m - 1));
+                        for (int i = 0; i < m - 1; i++) {
+                            for (int j = 0; j < N + n - 1; j++) {
+                                    dY_p[j + i*(N + n - 1)] = 0;
+                            }
+                        }
+                        for (int i = m - 1; i < M; i++) {
+                            for (int j = 0; j < N + n - 1; j++) {
+                                if(j < n - 1 || j > n - 1 + N) {
+                                    dY_p[j + i*(N + n - 1)] = 0;
+                                }
+                            }
+                        }
+                        for (int i = M; i < M + m - 1; i++) {
+                            for (int j = 0; j < N + n - 1; j++) {
+                                    dY_p[j + i*(N + n - 1)] = 0;
+                            }
+                        }
+
                         for (int i = 0; i < M; i++) {
                             for (int j = 0; j < N; j++) {
                                 for (int s = 0; s < m; s++) {
                                     for (int t = 0; t < n; t++){
-                                        if (i - s > 0 &&  j - t > 0) {
-                                            dX[i * (N - n + 1) + j] += dY[- t - s*N + i*N + j] * W[s * n + t];
-                                        } 
+                                        dX[j + i * N] += dY_p[t + s * N + i * N + j] * W[(m - s) * n + (n - t)];
                                     }
                                 }
                             }
                         }
+                        free(dY_p);
 }
 
 //maxpooling層（逆伝播）
@@ -323,7 +343,7 @@ void maxpooling_bwd (int n,
 //ランダムシャッフル
 void shuffle(int n, int *x){
     srand(time(NULL));
-    
+    #pragma omp parallel for
     for (int i = 0; i < n;i++){
         int num = rand() % n;
         swapi(&x[i], &x[num]);
@@ -375,27 +395,6 @@ void load(const char * filename, int m, int n, float * A, float * b) {
 
 
 
-//SGD
-void SGD(int m, 
-         int n, 
-         float *dA, //(m, n)
-         float *dAave, //(m, n)
-         float *db, //(n,)
-         float *dbave, //(n,)
-         float batch_f, 
-         float learning_rate,  
-         float *A, //(m, n)
-         float *b //(n,)
-         ) {
-    add(m * n, dA, dAave);
-    add(n, db, dbave);
-    scale(m * n, 1.0 / batch_f, dAave);
-    scale(n, 1.0 / batch_f, dbave);
-    scale(m * n, -1.0 * learning_rate, dAave);
-    scale(n, -1.0 * learning_rate, dbave);
-    add(m * n, dAave, A);
-    add(n, dbave, b);
-}
 
 
 
@@ -424,6 +423,7 @@ int inference6(const float *W1, //(5, 5)
     maxpooling(2,8,8,y5,y6);
     fc(10,16,y6,A7,b7,y7);
     softmax(10,y7,y8);               
+
     int temp = 1;
     float M = 0;
     for (int i = 0; i < 10; i++){
@@ -446,10 +446,6 @@ int inference6(const float *W1, //(5, 5)
 
     return temp;
 
-
-
-
-    return 0;
 }
 
 //back prop（6層）
@@ -522,7 +518,6 @@ void backward6(const float *W1, //(5, 5)
 
 
 } 
-
 // テスト
 int main(int argc, char const *argv[]) {
     float * train_x = NULL;

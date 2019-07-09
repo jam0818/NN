@@ -107,10 +107,10 @@ void fc(int m,
         const float *b, // (m,)
         float *y // (m,)
         ) {
-    #pragma omp parallel for
+    
     for(int i = 0; i < m; i++){
         y[i] = 0;
-        #pragma omp parallel for
+        
         for(int j = 0; j < n; j++){
             y[i] = y[i] + A[j + i * n] * x[j];
         }
@@ -121,7 +121,7 @@ void fc(int m,
 
 //relu層（順伝播）
 void relu(int n, const float *x, float *y) {
-    #pragma omp parallel for
+    
     for (int i = 0; i < n; i++) {
         if (x[i] < 0) {
             y[i] = 0;
@@ -135,18 +135,18 @@ void relu(int n, const float *x, float *y) {
 //softmax層（順伝播）
 void softmax(int n, const float *x, float *y) {
     float max = 0;
-    #pragma omp parallel for
+    
     for (int i = 0; i < n; i++){
         if (max < x[i]){
             max = x[i];
         }
     }
     float sum = 0;
-    #pragma omp parallel for
+    
     for (int i = 0; i < n; i++){
         sum += exp(x[i] - max);
     }
-    #pragma omp parallel for
+    
     for (int i = 0; i < n; i++){
         y[i] = (exp(x[i] - max) / sum);
     }
@@ -199,7 +199,7 @@ void maxpooling (int n,
 
 //softmax層（逆伝播）
 void softmaxwithloss_bwd(int n, const float *y, unsigned char t, float *dEdx) {
-    #pragma omp parallel for
+    
     for (int i = 0; i < n; i++) {
         if (i == t) {
             dEdx[i] = y[i] - 1;
@@ -211,7 +211,7 @@ void softmaxwithloss_bwd(int n, const float *y, unsigned char t, float *dEdx) {
 
 //Relu層（逆伝播）
 void relu_bwd(int n, const float * x, const float * dEdy, float * dEdx) {
-    #pragma omp parallel for
+    
     for (int i = 0; i < n; i++) {
         if (x[i] > 0) {
             dEdx[i] = dEdy[i];
@@ -232,23 +232,23 @@ void fc_bwd(int m,
             float *dEdx // (n,)
             ) {
     //dEdAの計算
-    #pragma omp parallel for
+    
     for (int i = 0; i < m; i++){
-        #pragma omp parallel for
+        
         for (int j = 0; j < n; j++){
             dEdA[j + i * n] = dEdy[i] * x[j];
         }
     }
     //dEdbの計算
-    #pragma omp parallel for
+    
     for (int i = 0; i < m; i++) {
         dEdb[i] = dEdy[i];
     }
     //下流へ転送する勾配
-    #pragma omp parallel for
+    
     for (int i = 0; i < n; i++){
         dEdx[i] = 0;
-        #pragma omp parallel for
+        
         for (int j = 0; j < m ; j++){
             dEdx[i] += A[j * n + i] * dEdy[j];
         }
@@ -325,7 +325,7 @@ void maxpooling_bwd (int n,
 //ランダムシャッフル
 void shuffle(int n, int *x){
     srand(time(NULL));
-    #pragma omp parallel for
+    
     for (int i = 0; i < n;i++){
         int num = rand() % n;
         swapi(&x[i], &x[num]);
@@ -377,6 +377,28 @@ void load(const char * filename, int m, int n, float * A, float * b) {
 
 
 
+//SGD
+void SGD(int m, 
+         int n, 
+         float *dA, //(m, n)
+         float *dAave, //(m, n)
+         float *db, //(n,)
+         float *dbave, //(n,)
+         float batch_f, 
+         float learning_rate,  
+         float *A, //(m, n)
+         float *b //(n,)
+         ) {
+    add(m * n, dA, dAave);
+    add(n, db, dbave);
+    scale(m * n, 1.0 / batch_f, dAave);
+    scale(n, 1.0 / batch_f, dbave);
+    scale(m * n, -1.0 * learning_rate, dAave);
+    scale(n, -1.0 * learning_rate, dbave);
+    add(m * n, dAave, A);
+    add(n, dbave, b);
+}
+
 
 
 //推論（6層）
@@ -404,7 +426,6 @@ int inference6(const float *W1, //(5, 5)
     maxpooling(2,8,8,y5,y6);
     fc(10,16,y6,A7,b7,y7);
     softmax(10,y7,y8);               
-
     int temp = 1;
     float M = 0;
     for (int i = 0; i < 10; i++){
@@ -427,6 +448,10 @@ int inference6(const float *W1, //(5, 5)
 
     return temp;
 
+
+
+
+    return 0;
 }
 
 //back prop（6層）
@@ -499,28 +524,6 @@ void backward6(const float *W1, //(5, 5)
 
 
 } 
-//SGD
-void SGD(int m, 
-         int n, 
-         float *dA, //(m, n)
-         float *dAave, //(m, n)
-         float *db, //(n,)
-         float *dbave, //(n,)
-         float batch_f, 
-         float learning_rate,  
-         float *A, //(m, n)
-         float *b //(n,)
-         ) {
-    add(m * n, dA, dAave);
-    add(n, db, dbave);
-    scale(m * n, 1.0 / batch_f, dAave);
-    scale(n, 1.0 / batch_f, dbave);
-    scale(m * n, -1.0 * learning_rate, dAave);
-    scale(n, -1.0 * learning_rate, dbave);
-    add(m * n, dAave, A);
-    add(n, dbave, b);
-}
-
 
 // テスト
 int main(int argc, char const *argv[]) {
@@ -540,16 +543,13 @@ int main(int argc, char const *argv[]) {
 // 訓練データ train_x + 784*i (i=0,...,train_count-1), train_y[0]～train_y[train_count-1],
 // テストデータ test_x + 784*i (i=0,...,test_count-1), test_y[0]～test_y[test_count-1],
 // を使用することができる．
-    if(argc != 4){
-        printf("error");
-        exit(1);
-    }
+
 
     //ハイパーパラメータの設定
-    int num_dim = atoi(argv[1]);
-    int batch_size = atoi(argv[2]);
-    int num_epoch = atoi(argv[3]);
-    float learning_rate = 0;
+    int num_dim = 784;//atoi(argv[1]);
+    int batch_size = 100;//atoi(argv[2]);
+    int num_epoch = 10;//atoi(argv[3]);
+    float learning_rate = 0.1;
     float batch_f = batch_size;
     int i, j, k;
 
@@ -558,10 +558,7 @@ int main(int argc, char const *argv[]) {
 
     //変数メモリの確保
     int *index = malloc(sizeof(int) * train_count);
-    float *acc_save_train = malloc(sizeof(float) * num_epoch);
-    float *loss_save_train = malloc(sizeof(float) * num_epoch);
-    float *acc_save_test = malloc(sizeof(float) * num_epoch);
-    float *loss_save_test = malloc(sizeof(float) * num_epoch);
+
     float *y8 = malloc(sizeof(float) *10);
     float *W1 = malloc(sizeof(float) * 5 * 5);
     float *W3 = malloc(sizeof(float) * 5 * 5);
@@ -581,7 +578,10 @@ int main(int argc, char const *argv[]) {
     float *dW3 = malloc(sizeof(float) * 5 * 5);
     float *dA7 = malloc(sizeof(float) * 10 * 16);
     float *db7 = malloc(sizeof(float) * 10);
-
+    float * acc_save_train = malloc(sizeof(float) * num_epoch);
+    float * loss_save_train = malloc(sizeof(float) * num_epoch);
+    float * acc_save_test = malloc(sizeof(float) * num_epoch);
+    float * loss_save_test = malloc(sizeof(float) * num_epoch);
     //パラメタの初期化
     srand((unsigned)time(NULL));
     rand_init(5*5,W1);
@@ -597,7 +597,6 @@ int main(int argc, char const *argv[]) {
 
     printf("your opitimizer is SGD\n");
     printf("Please input your learning rate : ");
-    scanf("%f", &learning_rate);
 
 
     //[0 : N-1]配列の作成
@@ -609,18 +608,16 @@ int main(int argc, char const *argv[]) {
     int num_train = train_count / batch_size;
 
     //確率的勾配降下法（エポック回数）
-    #ifdef _OPENMP
-    #pragma omp parallel
-    #endif
+
     {
-        #pragma omp for
+        
         for (i = 0; i < num_epoch; i++) {
 
             printf("======epoch %d / %d is running======\n\n", i + 1, num_epoch);
             //ランダムシャッフル
             shuffle(train_count, index);
             //勾配降下法（N/n回）
-            #pragma omp for
+            
             for (j = 0; j < num_train; j++) {
 
                 //初期化 
@@ -628,21 +625,21 @@ int main(int argc, char const *argv[]) {
                 init(5*5,0,dW3);
                 init(5*5,0,dW1ave);
                 init(5*5,0,dW3ave);
-                init(10*16,0,A7);
-                init(10,0,b7);
+                init(10*16,0,dA7);
+                init(10,0,db7);
                 db1ave = 0;
                 db3ave = 0;
                 db1 = 0;
                 db3 = 0;
 
                 //学習
-                #pragma omp for
+                
                 for (k = 0; k < batch_size; k++) { 
                     //back prop
                     printf("\r[%3d/100%%]", ((k + batch_size * j + 1) * 100) / train_count);
                     backward6(W1,W3,A7,train_x + 784 * index[100 * j + k],y8,&b1, &b3,b7,train_y[index[100 * j + k]],dW1,dW3,&db1,&db3,dA7,db7);
 
-                    print(5,5,W1);
+
                     SGD(5,5,dW1,dW1ave,&db1,&db1ave,batch_f,learning_rate,W1,&b1);
                     SGD(5,5,dW3,dW3ave,&db3,&db3ave,batch_f,learning_rate,W3,&b3);
                     SGD(16,10,dA7,dA7ave,db7,db7ave,batch_f,learning_rate,A7,b7);
@@ -653,6 +650,7 @@ int main(int argc, char const *argv[]) {
             }
 
             //正解率の確認
+            //正解率の確認
             int sum_train = 0;
             float loss_train = 0;
             float acc_train = 0;
@@ -660,7 +658,7 @@ int main(int argc, char const *argv[]) {
             float acc_test = 0;
             float loss_test = 0;
             
-            #pragma omp for
+            
             for (k = 0; k < train_count; k++) {
                 if (inference6(W1,W3,A7,&b1,&b3,b7, train_x + 784 * k, y8) == train_y[k]) {
                     sum_train++;
@@ -669,7 +667,7 @@ int main(int argc, char const *argv[]) {
             }
             acc_train = sum_train * 100.0 / train_count;
             
-            #pragma omp for
+            
             for (k = 0; k < test_count; k++) {
                 if (inference6(W1,W3,A7,&b1,&b3,b7, train_x + 784 * k, y8) == test_y[k]) {
                     sum_test++;
@@ -686,7 +684,8 @@ int main(int argc, char const *argv[]) {
             loss_save_train[i] = loss_train;
             acc_save_train[i] = acc_train;
             loss_save_test[i] = loss_test;
-            acc_save_test[i] = acc_test;
+            acc_save_test[i] = acc_test;           
+
 
         }
     }
